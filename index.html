@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kidbea Tracker</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --primary:#6366f1;--primary-dark:#4f46e5;
+  --success:#10b981;--danger:#ef4444;--warning:#f59e0b;
+  --dark:#1e293b;--light:#f8fafc;--gray:#64748b;
+  --border:#e2e8f0;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--light);color:var(--dark);}
+.hidden{display:none!important;}
+/* ── TOAST ── */
+#toastContainer{position:fixed;top:20px;right:20px;z-index:9999;}
+.toast{background:#fff;padding:14px 18px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);
+  margin-bottom:10px;display:flex;align-items:center;gap:10px;min-width:280px;
+  animation:slideIn .3s ease;}
+@keyframes slideIn{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+.toast.success{border-left:4px solid var(--success);}
+.toast.error  {border-left:4px solid var(--danger);}
+.toast.warning{border-left:4px solid var(--warning);}
+.toast.success i{color:var(--success);}
+.toast.error   i{color:var(--danger);}
+.toast.warning i{color:var(--warning);}
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;
+  display:flex;align-items:center;justify-content:center;}
+.modal-box{background:#fff;border-radius:16px;padding:32px;width:90%;max-width:500px;
+  max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.modal-box h3{font-size:20px;margin-bottom:20px;color:var(--dark);}
+/* ── LOGIN ── */
+#loginView{display:flex;align-items:center;justify-content:center;min-height:100vh;
+  background:linear-gradient(135deg,#667eea,#764ba2);}
+.login-card{background:#fff;padding:40px;border-radius:20px;
+  box-shadow:0 20px 60px rgba(0,0,0,.3);width:100%;max-width:400px;
+  animation:slideUp .5s ease;}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo i{font-size:48px;color:var(--primary);}
+.login-logo h1{font-size:26px;color:var(--dark);margin-top:10px;}
+.login-logo p{color:var(--gray);font-size:14px;}
+/* ── FORM ── */
+.form-group{margin-bottom:18px;}
+.form-group label{display:block;margin-bottom:6px;font-weight:600;color:var(--gray);font-size:13px;}
+.form-group input,.form-group select,.form-group textarea{
+  width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:10px;
+  font-size:15px;transition:border-color .2s;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{
+  outline:none;border-color:var(--primary);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+/* ── BUTTONS ── */
+.btn{padding:11px 18px;border:none;border-radius:10px;font-size:14px;font-weight:600;
+  cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:7px;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:hover{background:var(--primary-dark);}
+.btn-success{background:var(--success);color:#fff;}
+.btn-danger {background:var(--danger);color:#fff;}
+.btn-warning{background:var(--warning);color:#fff;}
+.btn-gray   {background:#e2e8f0;color:var(--dark);}
+.btn-full{width:100%;justify-content:center;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+/* ── REALTIME STATUS DOT ── */
+.rt-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;margin-left:auto;}
+.rt-status.live{background:#d1fae5;color:#065f46;}
+.rt-status.connecting{background:#fef3c7;color:#92400e;}
+.rt-status.offline{background:#fee2e2;color:#991b1b;}
+.rt-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.rt-status.live .rt-dot{background:#10b981;animation:rtPulse 1.8s ease-in-out infinite;}
+.rt-status.connecting .rt-dot{background:#f59e0b;}
+.rt-status.offline .rt-dot{background:#ef4444;}
+@keyframes rtPulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.6)}50%{box-shadow:0 0 0 5px rgba(16,185,129,0)}}
+/* ── MAIN LAYOUT ── */
+#staffView,#adminView{min-height:100vh;background:var(--light);}
+.app-header{background:#fff;padding:16px 24px;box-shadow:0 2px 8px rgba(0,0,0,.08);
+  display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:200;}
+.app-header-left{display:flex;align-items:center;gap:12px;}
+.app-header-left i{font-size:22px;color:var(--primary);}
+.app-header-left h2{font-size:18px;color:var(--dark);}
+.user-chip{display:flex;align-items:center;gap:10px;}
+.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;}
+.user-meta h3{font-size:14px;color:var(--dark);}
+.user-meta p{font-size:12px;color:var(--gray);}
+.badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;}
+.badge-on {background:#d1fae5;color:#065f46;}
+.badge-off{background:#fee2e2;color:#991b1b;}
+/* ── CONTENT ── */
+.main-content{max-width:1200px;margin:0 auto;padding:24px;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+@media(max-width:768px){.grid-2,.grid-3,.form-row{grid-template-columns:1fr;}}
+.card{background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.07);}
+.card-title{font-size:16px;font-weight:700;color:var(--dark);display:flex;align-items:center;gap:8px;margin-bottom:18px;}
+.card-title i{color:var(--primary);}
+/* ── CLOCK ── */
+.clock-wrap{text-align:center;padding:10px 0 20px;}
+.clock-time{font-size:44px;font-weight:700;font-family:'Courier New',monospace;color:var(--dark);}
+.clock-date{font-size:14px;color:var(--gray);margin-top:4px;}
+/* ── PUNCH BUTTON ── */
+.punch-btn{width:140px;height:140px;border-radius:50%;border:none;font-size:16px;font-weight:700;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  margin:20px auto;box-shadow:0 8px 24px rgba(0,0,0,.2);transition:all .3s;}
+.punch-btn i{font-size:30px;}
+.punch-btn.in {background:linear-gradient(135deg,var(--success),#059669);color:#fff;}
+.punch-btn.out{background:linear-gradient(135deg,var(--danger),#dc2626);color:#fff;}
+.punch-btn:hover:not(:disabled){transform:scale(1.06);}
+.punch-btn:disabled{background:var(--gray);cursor:not-allowed;transform:none;}
+/* ── LOCATION STATUS ── */
+.loc-status{padding:12px 16px;border-radius:10px;display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;}
+.loc-ok  {background:#d1fae5;color:#065f46;}
+.loc-bad {background:#fee2e2;color:#991b1b;}
+.loc-wait{background:#fef3c7;color:#92400e;}
+/* ── MAP ── */
+.map-box{height:320px;border-radius:12px;overflow:hidden;margin-top:12px;}
+.map-box-tall{height:480px;border-radius:12px;overflow:hidden;}
+/* ── TIMER ── */
+.session-timer{background:linear-gradient(135deg,var(--dark),#334155);color:#fff;
+  padding:16px;border-radius:12px;text-align:center;margin-top:14px;}
+.timer-num{font-size:32px;font-weight:700;font-family:'Courier New',monospace;margin:6px 0;}
+.timer-lbl{font-size:13px;opacity:.8;}
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto;margin-top:14px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{background:#f1f5f9;padding:10px 12px;text-align:left;font-weight:700;color:var(--gray);
+  border-bottom:2px solid var(--border);white-space:nowrap;}
+td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--dark);}
+tr:hover td{background:#f8fafc;}
+/* ── TABS ── */
+.tabs{display:flex;gap:4px;background:#f1f5f9;padding:6px;border-radius:12px;margin-bottom:24px;}
+.tab-btn{flex:1;padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:600;
+  cursor:pointer;background:transparent;color:var(--gray);transition:all .2s;}
+.tab-btn.active{background:#fff;color:var(--primary);box-shadow:0 2px 8px rgba(0,0,0,.1);}
+/* ── STAT CARDS ── */
+.stat-card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.07);}
+.stat-val{font-size:28px;font-weight:700;color:var(--primary);}
+.stat-lbl{font-size:12px;color:var(--gray);margin-top:4px;}
+/* ── STAFF LIST PANEL ── */
+.staff-panel{height:480px;overflow-y:auto;border-right:1px solid var(--border);padding-right:12px;}
+.staff-item{padding:12px;border-radius:10px;cursor:pointer;transition:background .2s;border:1px solid transparent;}
+.staff-item:hover{background:#f1f5f9;}
+.staff-item.on{border-color:var(--success);}
+.staff-item h4{font-size:13px;font-weight:700;}
+.staff-item p{font-size:12px;color:var(--gray);}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;}
+.dot-on{background:var(--success);}
+.dot-off{background:var(--gray);}
+/* ── FILTERS ── */
+.filter-bar{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px;}
+.filter-bar .form-group{margin-bottom:0;min-width:160px;}
+/* ── ADMIN TRACKING LAYOUT ── */
+.track-layout{display:grid;grid-template-columns:260px 1fr;gap:20px;}
+@media(max-width:900px){.track-layout{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════
+     LOGIN VIEW
+═══════════════════════════════════════ -->
+<div id="loginView">
+  <div class="login-card">
+    <div class="login-logo">
+      <img class="app-logo" alt="Kidbea Tracker" src="" style="width:210px;margin-bottom:6px;">
+      <p style="font-size:16px;font-weight:700;color:var(--dark);margin:2px 0 4px;">Tracker</p>
+      <p id="loginCompanyName">Staff Attendance &amp; Location System</p>
+    </div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>Staff ID</label>
+        <input id="loginStaffId" type="text" placeholder="e.g. EMP001" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="loginPassword" type="password" placeholder="Enter password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="loginBtn">
+        <i class="fas fa-sign-in-alt"></i> Login
+      </button>
+    </form>
+    <div id="loginError" class="hidden" style="margin-top:14px;padding:12px;background:#fee2e2;border-radius:8px;color:#991b1b;font-size:13px;"></div>
+    <div style="margin-top:18px;padding:14px;background:#f1f5f9;border-radius:8px;font-size:12px;color:var(--gray);">
+      <strong>First time setup?</strong> Open this file, edit <code>CONFIG</code> at the top of the script with your Supabase URL and key, then run the SQL schema in your Supabase SQL Editor.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     STAFF VIEW
+═══════════════════════════════════════ -->
+<div id="staffView" class="hidden">
+  <header class="app-header">
+    <div class="app-header-left">
+      <img class="app-logo" alt="Kidbea Tracker" src="" style="height:36px;">
+      <h2 id="staffCompanyHeader" style="display:none;"></h2>
+    </div>
+    <div class="user-chip">
+      <div class="avatar" id="staffAvatar">?</div>
+      <div class="user-meta">
+        <h3 id="staffName">-</h3>
+        <p id="staffDept">-</p>
+      </div>
+      <span class="badge badge-off" id="dutyBadge"><i class="fas fa-circle" style="font-size:7px"></i> OFF DUTY</span>
+      <button class="btn btn-gray" onclick="showChangePwdModal()"><i class="fas fa-key"></i></button>
+      <button class="btn btn-danger" onclick="logout()"><i class="fas fa-sign-out-alt"></i></button>
+    </div>
+  </header>
+
+  <div class="main-content">
+    <div class="grid-2">
+
+      <!-- PUNCH CARD -->
+      <div class="card">
+        <div class="card-title"><i class="fas fa-clock"></i> Attendance Control</div>
+        <div class="clock-wrap">
+          <div class="clock-time" id="clockDisplay">00:00:00</div>
+          <div class="clock-date" id="dateDisplay">-</div>
+        </div>
+        <button class="punch-btn in" id="punchBtn" onclick="handlePunch()" disabled>
+          <i class="fas fa-fingerprint"></i>
+          <span id="punchText">PUNCH IN</span>
+        </button>
+        <div class="loc-status loc-wait" id="locStatus">
+          <i class="fas fa-spinner fa-spin"></i>
+          <span id="locStatusText">Acquiring GPS…</span>
+        </div>
+        <div class="session-timer hidden" id="sessionTimerBox">
+          <div class="timer-lbl">Session Duration</div>
+          <div class="timer-num" id="timerDisplay">00:00:00</div>
+        </div>
+        <div style="margin-top:18px;" id="todayRecord">
+          <div class="card-title"><i class="fas fa-calendar-check"></i> Today</div>
+          <div id="todayInfo" style="color:var(--gray);font-size:13px;">No record yet.</div>
+        </div>
+      </div>
+
+      <!-- MAP CARD -->
+      <div class="card">
+        <div class="card-title">
+          <i class="fas fa-map"></i> Live Location
+          <span style="margin-left:auto;font-size:12px;color:var(--gray);" id="gpsCoords">—</span>
+        </div>
+        <div class="map-box" id="staffMapBox"></div>
+        <div class="grid-2" style="margin-top:14px;gap:12px;">
+          <div class="stat-card">
+            <div class="stat-val" id="hoursToday">0.0</div>
+            <div class="stat-lbl">Hours Today</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="distDisplay">—</div>
+            <div class="stat-lbl">Distance from Store</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HISTORY CARD (full width) -->
+      <div class="card" style="grid-column:1/-1;">
+        <div class="card-title"><i class="fas fa-history"></i> Attendance History (Last 7 Days)</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Punch In</th><th>Punch Out</th><th>Hours</th><th>Store</th></tr></thead>
+            <tbody id="historyBody"><tr><td colspan="5" style="color:var(--gray)">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ADMIN VIEW
+═══════════════════════════════════════ -->
+<div id="adminView" class="hidden">
+  <header class="app-header">
+    <div class="app-header-left">
+      <img class="app-logo" alt="Kidbea Tracker" src="" style="height:36px;">
+      <span style="font-size:12px;font-weight:700;color:#fff;background:#ef4444;padding:3px 10px;border-radius:20px;letter-spacing:.5px;">ADMIN</span>
+      <h2 id="adminCompanyHeader" style="display:none;"></h2>
+    </div>
+    <div class="user-chip">
+      <div class="avatar" style="background:linear-gradient(135deg,#ef4444,#b91c1c);" id="adminAvatar">A</div>
+      <div class="user-meta">
+        <h3 id="adminName">HR Administrator</h3>
+        <p>Admin</p>
+      </div>
+      <button class="btn btn-gray" onclick="showChangePwdModal()"><i class="fas fa-key"></i></button>
+      <button class="btn btn-danger" onclick="logout()"><i class="fas fa-sign-out-alt"></i></button>
+    </div>
+  </header>
+
+  <div class="main-content">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchAdminTab('live',this)"><i class="fas fa-satellite-dish"></i> Live Tracking</button>
+      <button class="tab-btn" onclick="switchAdminTab('reports',this)"><i class="fas fa-chart-bar"></i> Reports</button>
+      <button class="tab-btn" onclick="switchAdminTab('staff',this)"><i class="fas fa-users"></i> Staff</button>
+      <button class="tab-btn" onclick="switchAdminTab('stores',this)"><i class="fas fa-store"></i> Stores</button>
+    </div>
+
+    <!-- TAB: LIVE TRACKING -->
+    <div id="tab-live">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <span style="font-size:15px;font-weight:700;color:var(--dark);"><i class="fas fa-satellite-dish" style="color:var(--primary);margin-right:6px;"></i>Live Tracking</span>
+        <span class="rt-status connecting" id="rtStatusBadge"><span class="rt-dot"></span><span id="rtStatusText">Connecting…</span></span>
+        <span style="font-size:12px;color:var(--gray);margin-left:auto;" id="lastUpdatedText"></span>
+        <button class="btn btn-gray" style="padding:6px 12px;font-size:12px;" onclick="refreshLiveTracking()">
+          <i class="fas fa-sync"></i> Refresh
+        </button>
+      </div>
+      <div class="track-layout">
+        <div>
+          <div class="card-title"><i class="fas fa-users"></i> Staff On Duty</div>
+          <div class="staff-panel" id="staffListPanel">
+            <p style="color:var(--gray);font-size:13px;">Loading…</p>
+          </div>
+        </div>
+        <div>
+          <div class="map-box-tall" id="adminMapBox"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: REPORTS -->
+    <div id="tab-reports" class="hidden">
+      <div class="card" style="margin-bottom:18px;">
+        <div class="filter-bar">
+          <div class="form-group">
+            <label>From Date</label>
+            <input type="date" id="filterFrom">
+          </div>
+          <div class="form-group">
+            <label>To Date</label>
+            <input type="date" id="filterTo">
+          </div>
+          <div class="form-group">
+            <label>Staff</label>
+            <select id="filterStaff"><option value="">All Staff</option></select>
+          </div>
+          <div class="form-group">
+            <label>Store</label>
+            <select id="filterStore"><option value="">All Stores</option></select>
+          </div>
+          <button class="btn btn-primary" onclick="loadReport()"><i class="fas fa-search"></i> Search</button>
+          <button class="btn btn-success" onclick="exportCSV()"><i class="fas fa-file-csv"></i> Export CSV</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Staff Name</th><th>Store</th><th>Date</th><th>Punch In</th><th>Punch Out</th><th>Hours</th></tr></thead>
+            <tbody id="reportBody"><tr><td colspan="6" style="color:var(--gray)">Select filters and click Search.</td></tr></tbody>
+          </table>
+        </div>
+        <div id="reportTotal" style="margin-top:12px;font-weight:700;color:var(--dark);"></div>
+      </div>
+    </div>
+
+    <!-- TAB: STAFF MANAGEMENT -->
+    <div id="tab-staff" class="hidden">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-user-plus"></i> Add Staff</div>
+          <form id="addStaffForm" onsubmit="addStaff(event)">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Staff ID</label>
+                <input id="ns_id" type="text" placeholder="EMP001" required>
+              </div>
+              <div class="form-group">
+                <label>Full Name</label>
+                <input id="ns_name" type="text" placeholder="Jane Smith" required>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Department</label>
+                <input id="ns_dept" type="text" placeholder="Sales" required>
+              </div>
+              <div class="form-group">
+                <label>Role</label>
+                <select id="ns_role">
+                  <option value="staff">Staff</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Assigned Store</label>
+              <select id="ns_store"><option value="">— None —</option></select>
+            </div>
+            <div class="form-group">
+              <label>Temporary Password (min 8 chars, 1 upper, 1 number)</label>
+              <input id="ns_pwd" type="password" placeholder="Temp@1234" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full"><i class="fas fa-plus"></i> Create Account</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-title"><i class="fas fa-list"></i> All Staff</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Name</th><th>Dept</th><th>Store</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="staffTableBody"><tr><td colspan="7" style="color:var(--gray)">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: STORE MANAGEMENT -->
+    <div id="tab-stores" class="hidden">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-plus-circle"></i> Add / Edit Store</div>
+          <form id="storeForm" onsubmit="saveStore(event)">
+            <input type="hidden" id="sf_id">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Store Name</label>
+                <input id="sf_name" type="text" placeholder="Main Branch" required>
+              </div>
+              <div class="form-group">
+                <label>City</label>
+                <input id="sf_city" type="text" placeholder="Delhi" required>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Latitude</label>
+                <input id="sf_lat" type="number" step="0.0000001" placeholder="28.6139" required>
+              </div>
+              <div class="form-group">
+                <label>Longitude</label>
+                <input id="sf_lng" type="number" step="0.0000001" placeholder="77.2090" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Geofence Radius (meters)</label>
+              <input id="sf_radius" type="number" value="100" min="10" max="5000" required>
+            </div>
+            <p style="font-size:12px;color:var(--gray);margin-bottom:8px;"><i class="fas fa-info-circle"></i> Click on the map below to set coordinates automatically.</p>
+            <div class="map-box" id="storePickerMap"></div>
+            <div style="display:flex;gap:10px;margin-top:14px;">
+              <button type="submit" class="btn btn-primary" style="flex:1;"><i class="fas fa-save"></i> Save Store</button>
+              <button type="button" class="btn btn-gray" onclick="clearStoreForm()"><i class="fas fa-times"></i> Clear</button>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-title"><i class="fas fa-store"></i> All Stores</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>City</th><th>Radius</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="storeTableBody"><tr><td colspan="5" style="color:var(--gray)">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main-content -->
+</div><!-- /adminView -->
+
+<!-- ═══════════════════════════════════════
+     MODAL: CHANGE PASSWORD
+═══════════════════════════════════════ -->
+<div id="changePwdModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3><i class="fas fa-key"></i> Change Password</h3>
+    <form id="changePwdForm" onsubmit="changePassword(event)">
+      <div class="form-group">
+        <label>Current Password</label>
+        <input id="cp_old" type="password" required>
+      </div>
+      <div class="form-group">
+        <label>New Password (min 8 chars, 1 upper, 1 number)</label>
+        <input id="cp_new" type="password" required>
+      </div>
+      <div class="form-group">
+        <label>Confirm New Password</label>
+        <input id="cp_confirm" type="password" required>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;"><i class="fas fa-check"></i> Update</button>
+        <button type="button" class="btn btn-gray" onclick="closeModal('changePwdModal')"><i class="fas fa-times"></i> Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     MODAL: EDIT STAFF
+═══════════════════════════════════════ -->
+<div id="editStaffModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3><i class="fas fa-user-edit"></i> Edit Staff</h3>
+    <form id="editStaffForm" onsubmit="saveStaffEdit(event)">
+      <input type="hidden" id="es_id">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input id="es_name" type="text" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Department</label>
+          <input id="es_dept" type="text" required>
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="es_role">
+            <option value="staff">Staff</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Assigned Store</label>
+        <select id="es_store"><option value="">— None —</option></select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;"><i class="fas fa-save"></i> Save</button>
+        <button type="button" class="btn btn-gray" onclick="closeModal('editStaffModal')"><i class="fas fa-times"></i> Cancel</button>
+      </div>
+    </form>
+    <hr style="margin:18px 0;">
+    <div>
+      <div class="card-title" style="margin-bottom:12px;"><i class="fas fa-lock"></i> Reset Password</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>New Temp Password</label>
+          <input id="es_resetpwd" type="password" placeholder="Temp@1234">
+        </div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:18px;">
+          <button class="btn btn-warning" onclick="adminResetPassword()"><i class="fas fa-redo"></i> Reset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONFIG  —  Edit these values after creating Supabase project
+// ═══════════════════════════════════════════════════════
+const CONFIG = {
+  SUPABASE_URL: 'https://hcxveqwigytixfyhdlvt.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjeHZlcXdpZ3l0aXhmeWhkbHZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2ODg0MjEsImV4cCI6MjA4ODI2NDQyMX0.mULDClWwzkbYmzKB4mvsRIX0fFOZ4lRTLPASshOXtp8',
+  COMPANY_NAME: 'Kidbea Tracker',
+  LOCATION_LOG_INTERVAL_MS: 30000,
+  GPS_ACCURACY_THRESHOLD: 50,
+};
+
+// ─── Brand Logo (base64 embedded — no external file needed) ────────────────
+const LOGO_URI='data:image/png;base64,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';
+// Inject logo into every <img class="app-logo"> once DOM is ready
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelectorAll('img.app-logo').forEach(el=>el.src=LOGO_URI);
+});
+
+// ─── Supabase ───────────────────────────────────────────
+const { createClient } = supabase;
+let db;
+try {
+  db = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+} catch(e) {
+  console.error('Supabase init failed:', e);
+}
+
+// ─── App State ──────────────────────────────────────────
+let session = null;          // logged-in staff record
+let currentPos = null;       // {lat, lng, accuracy}
+let currentStore = null;     // store record assigned to staff
+let watchId = null;
+let isPunchedIn = false;
+let currentAttendanceId = null;
+let punchInTime = null;
+let sessionTimerInterval = null;
+let locationLogInterval = null;
+
+// Maps
+let staffMap = null, staffMarker = null, storeCircle = null;
+let adminLiveMap = null, adminMarkers = {};
+let adminStoreCircles = {};
+let storePickerMapObj = null, storePickerMarker = null, storePickerCircle = null;
+let realtimeChannel = null;
+let refreshDebounceTimer = null;
+let reportData = [];
+
+// ═══════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════
+async function sha256(msg) {
+  const buf = new TextEncoder().encode(msg);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function haversineDistance(lat1,lng1,lat2,lng2) {
+  const R=6371000, toRad=x=>x*Math.PI/180;
+  const φ1=toRad(lat1), φ2=toRad(lat2);
+  const Δφ=toRad(lat2-lat1), Δλ=toRad(lng2-lng1);
+  const a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function validatePassword(pwd) {
+  return pwd.length>=8 && /[A-Z]/.test(pwd) && /[0-9]/.test(pwd);
+}
+
+function fmtTime(isoStr) {
+  if(!isoStr) return '—';
+  return new Date(isoStr).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+}
+function fmtDate(isoStr) {
+  if(!isoStr) return '—';
+  return new Date(isoStr).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+}
+function fmtDuration(ms) {
+  const s=Math.floor(ms/1000), m=Math.floor(s/60)%60, h=Math.floor(s/3600);
+  return `${pad(h)}:${pad(m)}:${pad(s%60)}`;
+}
+function pad(n){return String(n).padStart(2,'0');}
+function getInitials(name){return name.split(' ').map(p=>p[0]).join('').toUpperCase().slice(0,2);}
+
+function showToast(msg,type='success'){
+  const c=document.getElementById('toastContainer');
+  const t=document.createElement('div');
+  t.className=`toast ${type}`;
+  const icons={success:'fa-check-circle',error:'fa-exclamation-circle',warning:'fa-exclamation-triangle'};
+  t.innerHTML=`<i class="fas ${icons[type]||icons.success}"></i><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .4s';setTimeout(()=>t.remove(),400);},3500);
+}
+
+function showView(id){
+  ['loginView','staffView','adminView'].forEach(v=>{
+    document.getElementById(v).classList.toggle('hidden',v!==id);
+  });
+}
+
+function closeModal(id){document.getElementById(id).classList.add('hidden');}
+
+// ═══════════════════════════════════════════════════════
+//  CLOCK
+// ═══════════════════════════════════════════════════════
+function updateClock(){
+  const now=new Date();
+  const el=document.getElementById('clockDisplay');
+  if(el) el.textContent=now.toLocaleTimeString('en-IN',{hour12:false});
+  const de=document.getElementById('dateDisplay');
+  if(de) de.textContent=now.toLocaleDateString('en-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+}
+setInterval(updateClock,1000);
+updateClock();
+
+// ═══════════════════════════════════════════════════════
+//  LOGIN
+// ═══════════════════════════════════════════════════════
+document.getElementById('loginForm').addEventListener('submit',async(e)=>{
+  e.preventDefault();
+  const btn=document.getElementById('loginBtn');
+  const errEl=document.getElementById('loginError');
+  errEl.classList.add('hidden');
+  btn.disabled=true;
+  btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Logging in…';
+  try {
+    if(!db) throw new Error('Supabase not configured. Please set CONFIG.SUPABASE_URL and CONFIG.SUPABASE_ANON_KEY.');
+    const staffId=document.getElementById('loginStaffId').value.trim().toUpperCase();
+    const password=document.getElementById('loginPassword').value;
+    const hash=await sha256(password);
+    const {data,error}=await db.from('staff').select('*').eq('staff_id',staffId).eq('is_active',true).single();
+    if(error||!data) throw new Error('Staff ID not found or account deactivated.');
+    if(data.password_hash!==hash) throw new Error('Incorrect password.');
+    session=data;
+    sessionStorage.setItem('hrSession',JSON.stringify(session));
+    await enterApp();
+  } catch(err){
+    errEl.textContent=err.message||'Login failed.';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled=false;
+    btn.innerHTML='<i class="fas fa-sign-in-alt"></i> Login';
+  }
+});
+
+async function enterApp(){
+  if(session.role==='admin'){
+    document.getElementById('adminName').textContent=session.full_name;
+    document.getElementById('adminAvatar').textContent=getInitials(session.full_name);
+    document.getElementById('adminCompanyHeader').textContent=CONFIG.COMPANY_NAME+' — Admin';
+    showView('adminView');
+    initAdminView();
+  } else {
+    document.getElementById('staffName').textContent=session.full_name;
+    document.getElementById('staffDept').textContent=session.department;
+    document.getElementById('staffAvatar').textContent=getInitials(session.full_name);
+    document.getElementById('staffCompanyHeader').textContent=CONFIG.COMPANY_NAME;
+    showView('staffView');
+    initStaffView();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  STAFF VIEW INIT
+// ═══════════════════════════════════════════════════════
+async function initStaffView(){
+  // Load assigned store
+  if(session.store_id){
+    const {data}=await db.from('stores').select('*').eq('id',session.store_id).single();
+    currentStore=data||null;
+  }
+  // Init staff map
+  const defaultLat=currentStore?parseFloat(currentStore.lat):20.5937;
+  const defaultLng=currentStore?parseFloat(currentStore.lng):78.9629;
+  staffMap=L.map('staffMapBox').setView([defaultLat,defaultLng],16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OpenStreetMap',maxZoom:19}).addTo(staffMap);
+
+  if(currentStore){
+    storeCircle=L.circle([parseFloat(currentStore.lat),parseFloat(currentStore.lng)],{
+      radius:parseInt(currentStore.radius_meters)||100,
+      color:'#10b981',fillColor:'#10b981',fillOpacity:.12
+    }).addTo(staffMap);
+    L.marker([parseFloat(currentStore.lat),parseFloat(currentStore.lng)],{
+      icon:L.divIcon({className:'',html:'<div style="background:#10b981;color:#fff;padding:4px 8px;border-radius:6px;font-size:11px;white-space:nowrap;">'+currentStore.name+'</div>',iconAnchor:[0,0]})
+    }).addTo(staffMap);
+  }
+
+  // Staff marker (pulsing blue)
+  const pulseIcon=L.divIcon({className:'',html:'<div style="width:14px;height:14px;background:#6366f1;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 6px rgba(99,102,241,.3);"></div>',iconSize:[14,14],iconAnchor:[7,7]});
+  staffMarker=L.marker([defaultLat,defaultLng],{icon:pulseIcon}).addTo(staffMap);
+
+  // Start GPS
+  startGPS();
+  // Load history
+  loadAttendanceHistory();
+  loadTodayRecord();
+}
+
+// ─── GPS ────────────────────────────────────────────────
+function startGPS(){
+  if(!navigator.geolocation){
+    setLocStatus('bad','GPS not supported by this browser.');
+    return;
+  }
+  watchId=navigator.geolocation.watchPosition(onGPSUpdate,onGPSError,{
+    enableHighAccuracy:true,timeout:15000,maximumAge:10000
+  });
+}
+
+function onGPSUpdate(pos){
+  const {latitude:lat,longitude:lng,accuracy}=pos.coords;
+  currentPos={lat,lng,accuracy};
+  // Update coords display
+  document.getElementById('gpsCoords').textContent=`${lat.toFixed(5)}, ${lng.toFixed(5)} (±${Math.round(accuracy)}m)`;
+  // Move marker
+  if(staffMarker) staffMarker.setLatLng([lat,lng]);
+  if(staffMap) staffMap.setView([lat,lng],16);
+
+  if(!currentStore){
+    setLocStatus('wait','No store assigned. Contact admin.');
+    document.getElementById('punchBtn').disabled=true;
+    return;
+  }
+  const dist=Math.round(haversineDistance(lat,lng,parseFloat(currentStore.lat),parseFloat(currentStore.lng)));
+  const radius=parseInt(currentStore.radius_meters)||100;
+  document.getElementById('distDisplay').textContent=`${dist}m`;
+
+  // Accuracy warning (non-blocking) — only hard-block if GPS is truly unusable (>200m)
+  if(accuracy>200){
+    setLocStatus('wait',`GPS signal too weak (±${Math.round(accuracy)}m). Please step outdoors.`);
+    if(!isPunchedIn) document.getElementById('punchBtn').disabled=true;
+    return;
+  }
+
+  if(dist<=radius){
+    const accWarn=accuracy>CONFIG.GPS_ACCURACY_THRESHOLD?` ⚠ Low GPS accuracy (±${Math.round(accuracy)}m)`:'';
+    setLocStatus('ok',`Within ${currentStore.name} zone (${dist}m away)${accWarn}`);
+    document.getElementById('punchBtn').disabled=false;
+  } else {
+    setLocStatus('bad',`Outside zone — ${dist}m from ${currentStore.name} (max ${radius}m)`);
+    if(!isPunchedIn) document.getElementById('punchBtn').disabled=true;
+    else showToast(`Warning: You are ${dist}m outside the store zone!`,'warning');
+  }
+}
+
+function onGPSError(err){
+  const msgs={1:'Location permission denied. Please allow location access.',
+               2:'GPS position unavailable.',3:'GPS timed out.'};
+  setLocStatus('bad',msgs[err.code]||'GPS error.');
+}
+
+function setLocStatus(type,text){
+  const el=document.getElementById('locStatus');
+  el.className='loc-status loc-'+type;
+  const icons={ok:'fa-check-circle',bad:'fa-exclamation-triangle',wait:'fa-spinner fa-spin'};
+  el.innerHTML=`<i class="fas ${icons[type]}"></i><span id="locStatusText">${text}</span>`;
+}
+
+// ─── PUNCH IN / OUT ─────────────────────────────────────
+async function handlePunch(){
+  const btn=document.getElementById('punchBtn');
+  btn.disabled=true;
+  try {
+    if(!isPunchedIn){
+      await doPunchIn();
+    } else {
+      await doPunchOut();
+    }
+  } catch(err){
+    showToast(err.message,'error');
+  } finally {
+    btn.disabled=false;
+  }
+}
+
+async function doPunchIn(){
+  if(!currentPos) throw new Error('GPS not ready.');
+  if(!session.store_id) throw new Error('No store assigned.');
+  const dist=haversineDistance(currentPos.lat,currentPos.lng,parseFloat(currentStore.lat),parseFloat(currentStore.lng));
+  if(dist>parseInt(currentStore.radius_meters)) throw new Error('You are outside the store zone. Cannot punch in.');
+
+  const {data,error}=await db.from('attendance').insert({
+    staff_id:session.staff_id,
+    store_id:session.store_id,
+    punch_in_time:new Date().toISOString(),
+    punch_in_lat:currentPos.lat,
+    punch_in_lng:currentPos.lng,
+  }).select().single();
+  if(error) throw new Error('Database error: '+error.message);
+
+  currentAttendanceId=data.id;
+  isPunchedIn=true;
+  punchInTime=new Date();
+
+  // UI
+  const pb=document.getElementById('punchBtn');
+  pb.className='punch-btn out';
+  document.getElementById('punchText').textContent='PUNCH OUT';
+  const db2=document.getElementById('dutyBadge');
+  db2.className='badge badge-on';
+  db2.innerHTML='<i class="fas fa-circle" style="font-size:7px"></i> ON DUTY';
+  document.getElementById('sessionTimerBox').classList.remove('hidden');
+
+  // Timer
+  sessionTimerInterval=setInterval(()=>{
+    document.getElementById('timerDisplay').textContent=fmtDuration(Date.now()-punchInTime);
+  },1000);
+
+  // Location logs
+  locationLogInterval=setInterval(logLocation,CONFIG.LOCATION_LOG_INTERVAL_MS);
+  logLocation();
+
+  showToast('Punched in successfully!','success');
+  loadTodayRecord();
+}
+
+async function doPunchOut(){
+  if(!currentAttendanceId) throw new Error('No active punch-in found.');
+  const punchOutTime=new Date();
+  const hours=((punchOutTime-punchInTime)/3600000).toFixed(2);
+
+  const {error}=await db.from('attendance').update({
+    punch_out_time:punchOutTime.toISOString(),
+    punch_out_lat:currentPos?currentPos.lat:null,
+    punch_out_lng:currentPos?currentPos.lng:null,
+    total_hours:parseFloat(hours),
+  }).eq('id',currentAttendanceId);
+  if(error) throw new Error('Database error: '+error.message);
+
+  isPunchedIn=false;
+  clearInterval(sessionTimerInterval);
+  clearInterval(locationLogInterval);
+
+  // UI
+  const pb=document.getElementById('punchBtn');
+  pb.className='punch-btn in';
+  document.getElementById('punchText').textContent='PUNCH IN';
+  const db2=document.getElementById('dutyBadge');
+  db2.className='badge badge-off';
+  db2.innerHTML='<i class="fas fa-circle" style="font-size:7px"></i> OFF DUTY';
+  document.getElementById('sessionTimerBox').classList.add('hidden');
+  document.getElementById('hoursToday').textContent=hours;
+
+  showToast(`Punched out! Worked ${hours} hours.`,'success');
+  loadTodayRecord();
+  loadAttendanceHistory();
+  currentAttendanceId=null;
+}
+
+async function logLocation(){
+  if(!currentPos||!isPunchedIn) return;
+  const dist=currentStore?Math.round(haversineDistance(currentPos.lat,currentPos.lng,parseFloat(currentStore.lat),parseFloat(currentStore.lng))):null;
+  await db.from('location_logs').insert({
+    staff_id:session.staff_id,
+    store_id:session.store_id||null,
+    lat:currentPos.lat,
+    lng:currentPos.lng,
+    distance_meters:dist,
+    is_within_zone:dist!==null&&dist<=(parseInt(currentStore?.radius_meters)||100),
+  });
+}
+
+async function loadTodayRecord(){
+  const todayStart=new Date();todayStart.setHours(0,0,0,0);
+  const todayEnd=new Date();todayEnd.setHours(23,59,59,999);
+  const {data}=await db.from('attendance').select('*').eq('staff_id',session.staff_id).gte('punch_in_time',todayStart.toISOString()).lte('punch_in_time',todayEnd.toISOString()).order('punch_in_time',{ascending:false}).limit(1).maybeSingle();
+  const el=document.getElementById('todayInfo');
+  if(!data){el.textContent='No record yet.';return;}
+  el.innerHTML=`In: <strong>${fmtTime(data.punch_in_time)}</strong> &nbsp;|&nbsp; Out: <strong>${data.punch_out_time?fmtTime(data.punch_out_time):'Active'}</strong> &nbsp;|&nbsp; Hours: <strong>${data.total_hours||'—'}</strong>`;
+  if(data.total_hours) document.getElementById('hoursToday').textContent=parseFloat(data.total_hours).toFixed(1);
+  // Restore punch state if punched in
+  if(data.punch_in_time&&!data.punch_out_time&&!isPunchedIn){
+    currentAttendanceId=data.id;
+    isPunchedIn=true;
+    punchInTime=new Date(data.punch_in_time);
+    const pb=document.getElementById('punchBtn');
+    pb.className='punch-btn out';
+    document.getElementById('punchText').textContent='PUNCH OUT';
+    const db2=document.getElementById('dutyBadge');
+    db2.className='badge badge-on';
+    db2.innerHTML='<i class="fas fa-circle" style="font-size:7px"></i> ON DUTY';
+    document.getElementById('sessionTimerBox').classList.remove('hidden');
+    sessionTimerInterval=setInterval(()=>{
+      document.getElementById('timerDisplay').textContent=fmtDuration(Date.now()-punchInTime);
+    },1000);
+    locationLogInterval=setInterval(logLocation,CONFIG.LOCATION_LOG_INTERVAL_MS);
+  }
+}
+
+async function loadAttendanceHistory(){
+  const since=new Date(Date.now()-7*86400000).toISOString();
+  const {data}=await db.from('attendance')
+    .select('*, stores(name)')
+    .eq('staff_id',session.staff_id)
+    .gte('punch_in_time',since)
+    .order('punch_in_time',{ascending:false});
+  const tbody=document.getElementById('historyBody');
+  if(!data||data.length===0){tbody.innerHTML='<tr><td colspan="5" style="color:var(--gray)">No records.</td></tr>';return;}
+  tbody.innerHTML=data.map(r=>`
+    <tr>
+      <td>${fmtDate(r.punch_in_time)}</td>
+      <td>${fmtTime(r.punch_in_time)}</td>
+      <td>${r.punch_out_time?fmtTime(r.punch_out_time):'<span style="color:var(--success)">Active</span>'}</td>
+      <td>${r.total_hours?parseFloat(r.total_hours).toFixed(2)+'h':'—'}</td>
+      <td>${r.stores?.name||'—'}</td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHANGE PASSWORD (staff + admin)
+// ═══════════════════════════════════════════════════════
+function showChangePwdModal(){document.getElementById('changePwdModal').classList.remove('hidden');}
+
+async function changePassword(e){
+  e.preventDefault();
+  const oldPwd=document.getElementById('cp_old').value;
+  const newPwd=document.getElementById('cp_new').value;
+  const confirm=document.getElementById('cp_confirm').value;
+  if(newPwd!==confirm){showToast('Passwords do not match.','error');return;}
+  if(!validatePassword(newPwd)){showToast('Password must be 8+ chars, include uppercase and a number.','error');return;}
+  const oldHash=await sha256(oldPwd);
+  if(oldHash!==session.password_hash){showToast('Current password is incorrect.','error');return;}
+  const newHash=await sha256(newPwd);
+  const {error}=await db.from('staff').update({password_hash:newHash}).eq('staff_id',session.staff_id);
+  if(error){showToast('Update failed: '+error.message,'error');return;}
+  session.password_hash=newHash;
+  sessionStorage.setItem('hrSession',JSON.stringify(session));
+  closeModal('changePwdModal');
+  document.getElementById('changePwdForm').reset();
+  showToast('Password changed successfully!','success');
+}
+
+// ═══════════════════════════════════════════════════════
+//  LOGOUT
+// ═══════════════════════════════════════════════════════
+async function logout(){
+  if(isPunchedIn){if(!confirm('You are still punched in. Punch out and logout?'))return;await doPunchOut();}
+  if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null;}
+  clearInterval(sessionTimerInterval);
+  clearInterval(locationLogInterval);
+  stopRealtimeTracking();
+  session=null;
+  sessionStorage.removeItem('hrSession');
+  isPunchedIn=false;currentPos=null;currentStore=null;currentAttendanceId=null;
+  // Destroy maps
+  if(staffMap){staffMap.remove();staffMap=null;staffMarker=null;storeCircle=null;}
+  if(adminLiveMap){adminLiveMap.remove();adminLiveMap=null;}
+  if(storePickerMapObj){storePickerMapObj.remove();storePickerMapObj=null;storePickerMarker=null;storePickerCircle=null;}
+  adminMarkers={};adminStoreCircles={};reportFiltersInited=false;reportData=[];
+  const lu=document.getElementById('lastUpdatedText');if(lu)lu.textContent='';
+  document.getElementById('loginForm').reset();
+  document.getElementById('loginError').classList.add('hidden');
+  showView('loginView');
+}
+
+// ═══════════════════════════════════════════════════════
+//  ADMIN: TAB SWITCHING
+// ═══════════════════════════════════════════════════════
+function switchAdminTab(tab,btn){
+  ['live','reports','staff','stores'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.toggle('hidden',t!==tab);
+  });
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if(tab==='live'){setTimeout(()=>{if(adminLiveMap)adminLiveMap.invalidateSize();},150);refreshLiveTracking();}
+  if(tab==='reports') initReportFilters();
+  if(tab==='staff') loadStaffTable();
+  if(tab==='stores') {loadStoreTable();initStorePicker();}
+}
+
+// ═══════════════════════════════════════════════════════
+//  ADMIN: INIT
+// ═══════════════════════════════════════════════════════
+async function initAdminView(){
+  // Always start on the Live tab (tab state may be dirty from a previous session)
+  ['live','reports','staff','stores'].forEach(t=>
+    document.getElementById('tab-'+t).classList.toggle('hidden',t!=='live'));
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
+
+  // Reset stale cross-session state
+  adminMarkers={};
+  adminStoreCircles={};
+
+  // Init live map
+  adminLiveMap=L.map('adminMapBox').setView([20.5937,78.9629],5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(adminLiveMap);
+  setTimeout(()=>adminLiveMap.invalidateSize(),250);
+  await refreshLiveTracking();
+  startRealtimeTracking();
+}
+
+// ─── REALTIME SUBSCRIPTION ──────────────────────────────
+function setRtStatus(state){
+  const badge=document.getElementById('rtStatusBadge');
+  const text=document.getElementById('rtStatusText');
+  if(!badge||!text) return;
+  badge.className='rt-status '+state;
+  const labels={live:'Live',connecting:'Connecting…',offline:'Disconnected'};
+  text.textContent=labels[state]||state;
+}
+
+function scheduleRefresh(){
+  // Debounce: wait 1s after last event before refreshing (absorbs location log bursts)
+  clearTimeout(refreshDebounceTimer);
+  refreshDebounceTimer=setTimeout(()=>refreshLiveTracking(),1000);
+}
+
+function startRealtimeTracking(){
+  if(realtimeChannel) db.removeChannel(realtimeChannel);
+  setRtStatus('connecting');
+
+  realtimeChannel=db.channel('admin-live-tracking')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'location_logs'},()=>scheduleRefresh())
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'attendance'},()=>scheduleRefresh())
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'attendance'},()=>scheduleRefresh())
+    .subscribe((status,err)=>{
+      if(status==='SUBSCRIBED'){
+        setRtStatus('live');
+      } else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+        setRtStatus('offline');
+        // Auto-retry after 10s
+        setTimeout(()=>{if(session&&session.role==='admin') startRealtimeTracking();},10000);
+      }
+    });
+}
+
+function stopRealtimeTracking(){
+  clearTimeout(refreshDebounceTimer);
+  if(realtimeChannel){db.removeChannel(realtimeChannel);realtimeChannel=null;}
+  setRtStatus('offline');
+}
+
+// ─── TAB 1: LIVE TRACKING ───────────────────────────────
+async function refreshLiveTracking(){
+  try { await _doRefreshLiveTracking(); } catch(e){ console.warn('Live tracking refresh failed:',e); }
+}
+async function _doRefreshLiveTracking(){
+  // Fetch all stores
+  const {data:stores}=await db.from('stores').select('*').eq('is_active',true);
+  // Draw store circles
+  Object.values(adminStoreCircles).forEach(c=>adminLiveMap.removeLayer(c));
+  adminStoreCircles={};
+  if(stores) stores.forEach(s=>{
+    adminStoreCircles[s.id]=L.circle([parseFloat(s.lat),parseFloat(s.lng)],{
+      radius:parseInt(s.radius_meters)||100,color:'#10b981',fillColor:'#10b981',fillOpacity:.1
+    }).addTo(adminLiveMap).bindPopup(`<strong>${s.name}</strong><br>${s.city}`);
+  });
+
+  // Fetch latest location per active staff in last 5 min
+  const since=new Date(Date.now()-5*60000).toISOString();
+  const {data:logs}=await db.from('location_logs')
+    .select('*, staff(full_name,department,store_id,stores(name))')
+    .gte('recorded_at',since)
+    .order('recorded_at',{ascending:false});
+
+  // Deduplicate: latest per staff_id
+  const latestMap={};
+  if(logs) logs.forEach(l=>{if(!latestMap[l.staff_id])latestMap[l.staff_id]=l;});
+
+  // Fetch all active punch-ins for on-duty status
+  const todayStart=new Date();todayStart.setHours(0,0,0,0);
+  const todayEnd=new Date();todayEnd.setHours(23,59,59,999);
+  const {data:punches}=await db.from('attendance').select('staff_id').gte('punch_in_time',todayStart.toISOString()).lte('punch_in_time',todayEnd.toISOString()).is('punch_out_time',null);
+  const onDutySet=new Set((punches||[]).map(p=>p.staff_id));
+
+  // Build staff panel
+  const panel=document.getElementById('staffListPanel');
+  // Remove old markers
+  Object.values(adminMarkers).forEach(m=>adminLiveMap.removeLayer(m));
+  adminMarkers={};
+
+  // Get all active staff
+  const {data:allStaff}=await db.from('staff').select('*,stores(name)').eq('is_active',true).eq('role','staff');
+  if(!allStaff||allStaff.length===0){panel.innerHTML='<p style="color:var(--gray);font-size:13px;">No active staff.</p>';return;}
+
+  let panelHtml='';
+  const bounds=[];
+
+  allStaff.forEach(st=>{
+    const onDuty=onDutySet.has(st.staff_id);
+    const loc=latestMap[st.staff_id];
+    const storeName=st.stores?.name||'—';
+    const lastSeen=loc?new Date(loc.recorded_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'—';
+    panelHtml+=`<div class="staff-item ${onDuty?'on':''}" onclick="focusStaff('${st.staff_id}')">
+      <span class="dot ${onDuty?'dot-on':'dot-off'}"></span><h4>${st.full_name}</h4>
+      <p>${storeName} · ${onDuty?'ON DUTY':'OFF DUTY'} · Last: ${lastSeen}</p>
+    </div>`;
+
+    if(loc){
+      const lat=parseFloat(loc.lat), lng=parseFloat(loc.lng);
+      bounds.push([lat,lng]);
+      const color=onDuty?'#10b981':'#64748b';
+      const icon=L.divIcon({className:'',html:`<div style="background:${color};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);">${getInitials(st.full_name)}</div>`,iconSize:[32,32],iconAnchor:[16,16]});
+      adminMarkers[st.staff_id]=L.marker([lat,lng],{icon}).addTo(adminLiveMap)
+        .bindPopup(`<strong>${st.full_name}</strong><br>Store: ${storeName}<br>Distance: ${loc.distance_meters||'?'}m<br>Status: ${onDuty?'ON DUTY':'OFF DUTY'}<br>Last seen: ${lastSeen}`);
+    }
+  });
+  panel.innerHTML=panelHtml||'<p style="color:var(--gray);font-size:13px;">No active staff.</p>';
+  if(bounds.length>0) adminLiveMap.fitBounds(bounds,{padding:[40,40],maxZoom:15});
+  const lu=document.getElementById('lastUpdatedText');
+  if(lu) lu.textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function focusStaff(staffId){
+  const m=adminMarkers[staffId];
+  if(m){adminLiveMap.setView(m.getLatLng(),17);m.openPopup();}
+}
+
+// ─── TAB 2: REPORTS ────────────────────────────────────
+let reportFiltersInited=false;
+async function initReportFilters(){
+  // Populate dropdowns only once; preserve user's filter selections on tab re-visits
+  if(!reportFiltersInited){
+    const today=new Date().toISOString().split('T')[0];
+    const week=new Date(Date.now()-6*86400000).toISOString().split('T')[0];
+    document.getElementById('filterFrom').value=week;
+    document.getElementById('filterTo').value=today;
+    const {data:staff}=await db.from('staff').select('staff_id,full_name').eq('is_active',true).order('full_name');
+    const fs=document.getElementById('filterStaff');
+    fs.innerHTML='<option value="">All Staff</option>'+(staff||[]).map(s=>`<option value="${s.staff_id}">${s.full_name}</option>`).join('');
+    const {data:stores}=await db.from('stores').select('id,name').eq('is_active',true).order('name');
+    const fst=document.getElementById('filterStore');
+    fst.innerHTML='<option value="">All Stores</option>'+(stores||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    reportFiltersInited=true;
+  }
+}
+
+async function loadReport(){
+  const from=document.getElementById('filterFrom').value;
+  const to=document.getElementById('filterTo').value;
+  const staffFilter=document.getElementById('filterStaff').value;
+  const storeFilter=document.getElementById('filterStore').value;
+  if(!from||!to){showToast('Select date range.','warning');return;}
+
+  let q=db.from('attendance').select('*, staff(full_name), stores(name)')
+    .gte('punch_in_time',from+'T00:00:00')
+    .lte('punch_in_time',to+'T23:59:59')
+    .order('punch_in_time',{ascending:false});
+  if(staffFilter) q=q.eq('staff_id',staffFilter);
+  if(storeFilter) q=q.eq('store_id',storeFilter);
+
+  const {data,error}=await q;
+  if(error){showToast('Query error: '+error.message,'error');return;}
+  reportData=data||[];
+
+  const tbody=document.getElementById('reportBody');
+  if(reportData.length===0){tbody.innerHTML='<tr><td colspan="6" style="color:var(--gray)">No records found.</td></tr>';document.getElementById('reportTotal').textContent='';return;}
+
+  let totalHours=0;
+  tbody.innerHTML=reportData.map(r=>{
+    const h=parseFloat(r.total_hours)||0;totalHours+=h;
+    return `<tr>
+      <td>${r.staff?.full_name||r.staff_id}</td>
+      <td>${r.stores?.name||'—'}</td>
+      <td>${fmtDate(r.punch_in_time)}</td>
+      <td>${fmtTime(r.punch_in_time)}</td>
+      <td>${r.punch_out_time?fmtTime(r.punch_out_time):'Active'}</td>
+      <td>${h.toFixed(2)}h</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('reportTotal').textContent=`Total: ${reportData.length} records | ${totalHours.toFixed(2)} hours`;
+}
+
+function exportCSV(){
+  if(!reportData.length){showToast('No data to export.','warning');return;}
+  const rows=[['Staff Name','Store','Date','Punch In','Punch Out','Hours']];
+  reportData.forEach(r=>{
+    rows.push([
+      r.staff?.full_name||r.staff_id,
+      r.stores?.name||'',
+      fmtDate(r.punch_in_time),
+      fmtTime(r.punch_in_time),
+      r.punch_out_time?fmtTime(r.punch_out_time):'Active',
+      parseFloat(r.total_hours||0).toFixed(2),
+    ]);
+  });
+  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download=`attendance_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+}
+
+// ─── TAB 3: STAFF MANAGEMENT ───────────────────────────
+async function loadStaffTable(){
+  const {data:stores}=await db.from('stores').select('id,name').eq('is_active',true).order('name');
+  // Populate add-staff store dropdown
+  const ns=document.getElementById('ns_store');
+  ns.innerHTML='<option value="">— None —</option>'+(stores||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const es=document.getElementById('es_store');
+  es.innerHTML='<option value="">— None —</option>'+(stores||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+
+  const {data:staff}=await db.from('staff').select('*,stores(name)').order('staff_id');
+  const tbody=document.getElementById('staffTableBody');
+  if(!staff||staff.length===0){tbody.innerHTML='<tr><td colspan="7" style="color:var(--gray)">No staff found.</td></tr>';return;}
+  tbody.innerHTML=staff.map(s=>`
+    <tr>
+      <td><code>${s.staff_id}</code></td>
+      <td>${s.full_name}</td>
+      <td>${s.department}</td>
+      <td>${s.stores?.name||'—'}</td>
+      <td><span class="badge ${s.role==='admin'?'badge-on':'badge-off'}">${s.role}</span></td>
+      <td><span class="badge ${s.is_active?'badge-on':'badge-off'}">${s.is_active?'Active':'Inactive'}</span></td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="openEditStaff('${s.staff_id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn ${s.is_active?'btn-danger':'btn-success'}" style="padding:6px 10px;font-size:12px;" onclick="toggleStaffActive('${s.staff_id}',${s.is_active})">${s.is_active?'<i class="fas fa-ban"></i>':'<i class="fas fa-check"></i>'}</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function addStaff(e){
+  e.preventDefault();
+  const id=document.getElementById('ns_id').value.trim().toUpperCase();
+  const name=document.getElementById('ns_name').value.trim();
+  const dept=document.getElementById('ns_dept').value.trim();
+  const role=document.getElementById('ns_role').value;
+  const storeId=document.getElementById('ns_store').value||null;
+  const pwd=document.getElementById('ns_pwd').value;
+  if(!validatePassword(pwd)){showToast('Password must be 8+ chars, uppercase and number.','error');return;}
+  const hash=await sha256(pwd);
+  const {error}=await db.from('staff').insert({staff_id:id,full_name:name,department:dept,role,store_id:storeId,password_hash:hash});
+  if(error){showToast('Error: '+error.message,'error');return;}
+  showToast(`Staff ${id} created.`,'success');
+  document.getElementById('addStaffForm').reset();
+  loadStaffTable();
+}
+
+function openEditStaff(staffId){
+  db.from('staff').select('*').eq('staff_id',staffId).single().then(({data})=>{
+    if(!data)return;
+    document.getElementById('es_id').value=data.staff_id;
+    document.getElementById('es_name').value=data.full_name;
+    document.getElementById('es_dept').value=data.department;
+    document.getElementById('es_role').value=data.role;
+    document.getElementById('es_store').value=data.store_id||'';
+    document.getElementById('editStaffModal').classList.remove('hidden');
+  });
+}
+
+async function saveStaffEdit(e){
+  e.preventDefault();
+  const id=document.getElementById('es_id').value;
+  const {error}=await db.from('staff').update({
+    full_name:document.getElementById('es_name').value.trim(),
+    department:document.getElementById('es_dept').value.trim(),
+    role:document.getElementById('es_role').value,
+    store_id:document.getElementById('es_store').value||null,
+  }).eq('staff_id',id);
+  if(error){showToast('Error: '+error.message,'error');return;}
+  closeModal('editStaffModal');
+  showToast('Staff updated.','success');
+  loadStaffTable();
+}
+
+async function adminResetPassword(){
+  const id=document.getElementById('es_id').value;
+  const pwd=document.getElementById('es_resetpwd').value;
+  if(!validatePassword(pwd)){showToast('Password too weak.','error');return;}
+  const hash=await sha256(pwd);
+  const {error}=await db.from('staff').update({password_hash:hash}).eq('staff_id',id);
+  if(error){showToast('Error: '+error.message,'error');return;}
+  document.getElementById('es_resetpwd').value='';
+  showToast('Password reset successfully.','success');
+}
+
+async function toggleStaffActive(staffId,currentActive){
+  const {error}=await db.from('staff').update({is_active:!currentActive}).eq('staff_id',staffId);
+  if(error){showToast('Error: '+error.message,'error');return;}
+  showToast(`Staff ${currentActive?'deactivated':'reactivated'}.`,'success');
+  loadStaffTable();
+}
+
+// ─── TAB 4: STORE MANAGEMENT ───────────────────────────
+function initStorePicker(){
+  if(storePickerMapObj) return; // already inited
+  storePickerMapObj=L.map('storePickerMap').setView([20.5937,78.9629],5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(storePickerMapObj);
+  setTimeout(()=>storePickerMapObj.invalidateSize(),250);
+  storePickerMapObj.on('click',function(ev){
+    const {lat,lng}=ev.latlng;
+    document.getElementById('sf_lat').value=lat.toFixed(7);
+    document.getElementById('sf_lng').value=lng.toFixed(7);
+    updateStorePickerMarker(lat,lng);
+  });
+}
+
+function updateStorePickerMarker(lat,lng){
+  if(storePickerMarker) storePickerMapObj.removeLayer(storePickerMarker);
+  if(storePickerCircle) storePickerMapObj.removeLayer(storePickerCircle);
+  storePickerMarker=L.marker([lat,lng]).addTo(storePickerMapObj);
+  const r=parseInt(document.getElementById('sf_radius').value)||100;
+  storePickerCircle=L.circle([lat,lng],{radius:r,color:'#10b981',fillColor:'#10b981',fillOpacity:.15}).addTo(storePickerMapObj);
+  storePickerMapObj.setView([lat,lng],16);
+}
+
+async function loadStoreTable(){
+  const {data:stores}=await db.from('stores').select('*').order('name');
+  const tbody=document.getElementById('storeTableBody');
+  if(!stores||stores.length===0){tbody.innerHTML='<tr><td colspan="5" style="color:var(--gray)">No stores found.</td></tr>';return;}
+  tbody.innerHTML=stores.map(s=>`
+    <tr>
+      <td><strong>${s.name}</strong></td>
+      <td>${s.city}</td>
+      <td>${s.radius_meters}m</td>
+      <td><span class="badge ${s.is_active?'badge-on':'badge-off'}">${s.is_active?'Active':'Inactive'}</span></td>
+      <td style="display:flex;gap:6px;">
+        <button class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="editStore('${s.id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn ${s.is_active?'btn-danger':'btn-success'}" style="padding:6px 10px;font-size:12px;" onclick="toggleStoreActive('${s.id}',${s.is_active})">${s.is_active?'<i class="fas fa-ban"></i>':'<i class="fas fa-check"></i>'}</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function saveStore(e){
+  e.preventDefault();
+  const id=document.getElementById('sf_id').value;
+  const payload={
+    name:document.getElementById('sf_name').value.trim(),
+    city:document.getElementById('sf_city').value.trim(),
+    lat:parseFloat(document.getElementById('sf_lat').value),
+    lng:parseFloat(document.getElementById('sf_lng').value),
+    radius_meters:parseInt(document.getElementById('sf_radius').value),
+  };
+  let error;
+  if(id){({error}=await db.from('stores').update(payload).eq('id',id));}
+  else  {({error}=await db.from('stores').insert(payload));}
+  if(error){showToast('Error: '+error.message,'error');return;}
+  showToast(id?'Store updated.':'Store created.','success');
+  clearStoreForm();
+  loadStoreTable();
+}
+
+function editStore(id){
+  db.from('stores').select('*').eq('id',id).single().then(({data})=>{
+    if(!data)return;
+    document.getElementById('sf_id').value=data.id;
+    document.getElementById('sf_name').value=data.name;
+    document.getElementById('sf_city').value=data.city;
+    document.getElementById('sf_lat').value=data.lat;
+    document.getElementById('sf_lng').value=data.lng;
+    document.getElementById('sf_radius').value=data.radius_meters;
+    initStorePicker();
+    updateStorePickerMarker(parseFloat(data.lat),parseFloat(data.lng));
+  });
+}
+
+function clearStoreForm(){
+  document.getElementById('storeForm').reset();
+  document.getElementById('sf_id').value='';
+  if(storePickerMarker){storePickerMapObj.removeLayer(storePickerMarker);storePickerMarker=null;}
+  if(storePickerCircle){storePickerMapObj.removeLayer(storePickerCircle);storePickerCircle=null;}
+}
+
+async function toggleStoreActive(id,currentActive){
+  const {error}=await db.from('stores').update({is_active:!currentActive}).eq('id',id);
+  if(error){showToast('Error: '+error.message,'error');return;}
+  showToast(`Store ${currentActive?'deactivated':'activated'}.`,'success');
+  loadStoreTable();
+}
+
+// ═══════════════════════════════════════════════════════
+//  SESSION RESTORE ON PAGE LOAD
+// ═══════════════════════════════════════════════════════
+(async()=>{
+  // Update company name in login
+  document.getElementById('loginCompanyName').textContent=CONFIG.COMPANY_NAME+' — Staff Attendance';
+  const saved=sessionStorage.getItem('hrSession');
+  if(saved){
+    try{
+      session=JSON.parse(saved);
+      // Re-verify from DB
+      const {data,error}=await db.from('staff').select('*').eq('staff_id',session.staff_id).eq('is_active',true).single();
+      if(error||!data){sessionStorage.removeItem('hrSession');return;}
+      session=data;
+      await enterApp();
+    } catch(e){sessionStorage.removeItem('hrSession');}
+  }
+})();
+
+// Warn on close if punched in
+window.onbeforeunload=()=>{if(isPunchedIn)return 'You are still punched in. Punch out before closing.';};
+</script>
+</body>
+</html>
