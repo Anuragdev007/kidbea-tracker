@@ -16,7 +16,7 @@
   --dark:#1e293b;--light:#f8fafc;--gray:#64748b;
   --border:#e2e8f0;
 }
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--light);color:var(--dark);}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--light);color:var(--dark);overflow-x:hidden;}
 .hidden{display:none!important;}
 /* ── TOAST ── */
 #toastContainer{position:fixed;top:20px;right:20px;z-index:9999;}
@@ -158,6 +158,83 @@ tr:hover td{background:#f8fafc;}
 /* ── ADMIN TRACKING LAYOUT ── */
 .track-layout{display:grid;grid-template-columns:260px 1fr;gap:20px;}
 @media(max-width:900px){.track-layout{grid-template-columns:1fr;}}
+
+/* ════════════════════════════════════════
+   MOBILE RESPONSIVE  (≤ 640px)
+════════════════════════════════════════ */
+@media(max-width:640px){
+
+  /* Toast — bottom bar on mobile */
+  #toastContainer{top:auto;bottom:16px;right:8px;left:8px;}
+  .toast{min-width:unset;width:100%;}
+
+  /* Login */
+  #loginView{padding:16px;align-items:flex-start;padding-top:40px;}
+  .login-card{padding:24px 20px;border-radius:16px;}
+  .login-logo img.app-logo{width:160px!important;}
+
+  /* Header — two-row layout */
+  .app-header{padding:10px 14px;flex-wrap:wrap;gap:8px;}
+  .app-header-left{gap:8px;}
+  .app-header-left img.app-logo{height:28px!important;}
+  .app-header-left span[style*="ADMIN"]{font-size:10px!important;padding:2px 8px!important;}
+  .user-chip{gap:6px;flex-wrap:wrap;}
+  .user-meta{display:none;}           /* hide name/dept text — avatar initial is enough */
+  .avatar{width:34px;height:34px;font-size:13px;}
+  #dutyBadge{font-size:10px;padding:3px 7px;}
+  .user-chip .btn{padding:7px 10px;font-size:13px;}
+  .user-chip .btn i + *{display:none;} /* icon-only buttons in header */
+
+  /* Main content */
+  .main-content{padding:12px;}
+
+  /* Clock */
+  .clock-time{font-size:34px;}
+  .clock-wrap{padding:6px 0 14px;}
+
+  /* Punch button */
+  .punch-btn{width:120px;height:120px;font-size:14px;}
+  .punch-btn i{font-size:26px;}
+
+  /* Cards */
+  .card{padding:16px;}
+
+  /* Admin tabs — icon + short label */
+  .tabs{padding:4px;gap:3px;}
+  .tab-btn{padding:8px 4px;font-size:11px;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  /* Staff panel height on mobile */
+  .staff-panel{height:240px;}
+  .map-box-tall{height:320px;}
+
+  /* Filter bar — full-width inputs */
+  .filter-bar{flex-direction:column;gap:10px;}
+  .filter-bar .form-group{min-width:unset;width:100%;}
+  .filter-bar .btn{width:100%;justify-content:center;}
+
+  /* Tables — smaller font */
+  table{font-size:12px;}
+  th,td{padding:8px 8px;}
+
+  /* Stat cards */
+  .stat-val{font-size:22px;}
+  .stat-card{padding:12px;}
+
+  /* Modal */
+  .modal-box{padding:20px 16px;border-radius:12px;}
+
+  /* Timer */
+  .timer-num{font-size:26px;}
+
+  /* Map */
+  .map-box{height:260px;}
+
+  /* Realtime status — shrink */
+  .rt-status{font-size:11px;padding:3px 8px;}
+
+  /* Store picker map in form */
+  #storePickerMap{height:220px!important;}
+}
 </style>
 </head>
 <body>
