@@ -1037,19 +1037,20 @@ async function doPunchIn(photoUrl){
   loadTodayRecord();
 }
 
-async function doPunchOut(photoUrl){
+async function doPunchOut(photoUrl, forceLogout){
   if(!currentAttendanceId) throw new Error('No active punch-in found.');
   const punchOutTime=new Date();
   const hours=((punchOutTime-punchInTime)/3600000).toFixed(2);
 
-  // ── Geofence at Punch Out (Layer 3) ──
+  // ── Geofence at Punch Out (Layer 3) — BLOCKED outside zone ──
+  if(!currentPos) throw new Error('GPS not ready. Cannot punch out.');
   let punchOutWithinZone = null;
-  if(currentPos && currentStore){
+  if(currentStore){
     const dist = Math.round(haversineDistance(currentPos.lat, currentPos.lng, parseFloat(currentStore.lat), parseFloat(currentStore.lng)));
     const radius = parseInt(currentStore.radius_meters) || 100;
     punchOutWithinZone = dist <= radius;
-    if(!punchOutWithinZone){
-      showToast(`Warning: Punching out ${dist}m outside store zone!`, 'warning');
+    if(!punchOutWithinZone && !forceLogout){
+      throw new Error(`You are ${dist}m outside the store zone (max ${radius}m). Cannot punch out.`);
     }
   }
 
@@ -1170,7 +1171,7 @@ async function changePassword(e){
 //  LOGOUT
 // ═══════════════════════════════════════════════════════
 async function logout(){
-  if(isPunchedIn){if(!confirm('You are still punched in. Punch out and logout?'))return;await doPunchOut(null);}
+  if(isPunchedIn){if(!confirm('You are still punched in. Punch out and logout?'))return;await doPunchOut(null,true);}
   stopSelfieStream();
   if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null;}
   clearInterval(sessionTimerInterval);
