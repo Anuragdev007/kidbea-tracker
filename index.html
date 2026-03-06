@@ -243,6 +243,18 @@ tr:hover td{background:#f8fafc;}
   /* Store picker map in form */
   #storePickerMap{height:220px!important;}
 }
+/* ── SELFIE MODAL ── */
+.selfie-modal{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:6000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.selfie-modal h3{color:#fff;margin-bottom:14px;font-size:18px;}
+.selfie-preview{width:320px;height:240px;border-radius:12px;overflow:hidden;background:#000;position:relative;}
+.selfie-preview video,.selfie-preview img{width:100%;height:100%;object-fit:cover;}
+.selfie-preview video{transform:scaleX(-1);}
+.selfie-actions{display:flex;gap:10px;margin-top:16px;}
+.selfie-actions .btn{min-width:120px;justify-content:center;}
+@media(max-width:640px){
+  .selfie-preview{width:280px;height:210px;}
+}
 </style>
 </head>
 <body>
@@ -437,13 +449,14 @@ tr:hover td{background:#f8fafc;}
           </div>
           <button class="btn btn-primary" onclick="loadReport()"><i class="fas fa-search"></i> Search</button>
           <button class="btn btn-success" onclick="exportCSV()"><i class="fas fa-file-csv"></i> Export CSV</button>
+          <button class="btn btn-warning" onclick="manualPhotoCleanup()" title="Delete selfie photos older than 30 days"><i class="fas fa-trash-alt"></i> Clean Old Photos</button>
         </div>
       </div>
       <div class="card">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Staff Name</th><th>Store</th><th>Date</th><th>Punch In</th><th>Punch Out</th><th>Hours</th></tr></thead>
-            <tbody id="reportBody"><tr><td colspan="6" style="color:var(--gray)">Select filters and click Search.</td></tr></tbody>
+            <thead><tr><th>Staff Name</th><th>Store</th><th>Date</th><th>Punch In</th><th>Punch Out</th><th>Hours</th><th>Zone</th><th>In Photo</th><th>Out Photo</th></tr></thead>
+            <tbody id="reportBody"><tr><td colspan="9" style="color:var(--gray)">Select filters and click Search.</td></tr></tbody>
           </table>
         </div>
         <div id="reportTotal" style="margin-top:12px;font-weight:700;color:var(--dark);"></div>
@@ -630,6 +643,30 @@ tr:hover td{background:#f8fafc;}
         </div>
       </div>
     </div>
+    <hr style="margin:18px 0;">
+    <div>
+      <div class="card-title" style="margin-bottom:12px;"><i class="fas fa-mobile-alt"></i> Device Binding</div>
+      <p id="es_deviceStatus" style="font-size:13px;color:var(--gray);margin-bottom:10px;">Loading…</p>
+      <button class="btn btn-warning" onclick="adminResetDevice()"><i class="fas fa-unlink"></i> Reset Device</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SELFIE CAPTURE MODAL
+═══════════════════════════════════════ -->
+<div id="selfieModal" class="selfie-modal hidden">
+  <h3><i class="fas fa-camera"></i> <span id="selfieTitle">Take Selfie to Punch In</span></h3>
+  <div class="selfie-preview">
+    <video id="selfieVideo" autoplay playsinline></video>
+    <canvas id="selfieCanvas" style="display:none;"></canvas>
+    <img id="selfieCaptured" style="display:none;">
+  </div>
+  <div class="selfie-actions">
+    <button class="btn btn-primary" id="selfieCaptureBtn" onclick="captureSelfie()"><i class="fas fa-camera"></i> Capture</button>
+    <button class="btn btn-success hidden" id="selfieConfirmBtn" onclick="confirmSelfie()"><i class="fas fa-check"></i> Confirm & Punch</button>
+    <button class="btn btn-warning hidden" id="selfieRetakeBtn" onclick="retakeSelfie()"><i class="fas fa-redo"></i> Retake</button>
+    <button class="btn btn-gray" onclick="cancelSelfie()"><i class="fas fa-times"></i> Cancel</button>
   </div>
 </div>
 
@@ -671,6 +708,12 @@ let currentAttendanceId = null;
 let punchInTime = null;
 let sessionTimerInterval = null;
 let locationLogInterval = null;
+let currentSessionToken = null;
+
+// Selfie state
+let selfieStream = null;
+let selfieBlob = null;
+let selfieAction = null; // 'in' or 'out'
 
 // Maps
 let staffMap = null, staffMarker = null, storeCircle = null;
@@ -735,6 +778,35 @@ function showView(id){
 
 function closeModal(id){document.getElementById(id).classList.add('hidden');}
 
+// ─── Session Validation (Anti-Buddy-Punching Layer 4) ──
+async function validateSession(){
+  if(!session || !currentSessionToken) return;
+  const {data} = await db.from('staff').select('last_session_token').eq('staff_id', session.staff_id).single();
+  if(data && data.last_session_token !== currentSessionToken){
+    showToast('Session ended — someone logged in from another device.', 'error');
+    forceLogout();
+    throw new Error('Session invalidated.');
+  }
+}
+
+function forceLogout(){
+  if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null;}
+  clearInterval(sessionTimerInterval);
+  clearInterval(locationLogInterval);
+  stopRealtimeTracking();
+  stopSelfieStream();
+  session=null;currentSessionToken=null;
+  sessionStorage.removeItem('hrSession');
+  isPunchedIn=false;currentPos=null;currentStore=null;currentAttendanceId=null;
+  if(staffMap){staffMap.remove();staffMap=null;staffMarker=null;storeCircle=null;}
+  if(adminLiveMap){adminLiveMap.remove();adminLiveMap=null;}
+  if(storePickerMapObj){storePickerMapObj.remove();storePickerMapObj=null;storePickerMarker=null;storePickerCircle=null;}
+  adminMarkers={};adminStoreCircles={};reportFiltersInited=false;reportData=[];
+  document.getElementById('loginForm').reset();
+  document.getElementById('loginError').classList.add('hidden');
+  showView('loginView');
+}
+
 // ═══════════════════════════════════════════════════════
 //  CLOCK
 // ═══════════════════════════════════════════════════════
@@ -766,6 +838,23 @@ document.getElementById('loginForm').addEventListener('submit',async(e)=>{
     const {data,error}=await db.from('staff').select('*').eq('staff_id',staffId).eq('is_active',true).single();
     if(error||!data) throw new Error('Staff ID not found or account deactivated.');
     if(data.password_hash!==hash) throw new Error('Incorrect password.');
+
+    // ── Device Binding (Layer 2) ──
+    let hrDeviceId = localStorage.getItem('hrDeviceId');
+    if(!hrDeviceId){ hrDeviceId = crypto.randomUUID(); localStorage.setItem('hrDeviceId', hrDeviceId); }
+    if(data.device_id && data.device_id !== hrDeviceId){
+      throw new Error('Account registered to another device. Contact admin to reset device binding.');
+    }
+    if(!data.device_id){
+      await db.from('staff').update({device_id: hrDeviceId}).eq('staff_id', data.staff_id);
+      data.device_id = hrDeviceId;
+    }
+
+    // ── Concurrent Session Prevention (Layer 4) ──
+    currentSessionToken = crypto.randomUUID();
+    await db.from('staff').update({last_session_token: currentSessionToken}).eq('staff_id', data.staff_id);
+    data._sessionToken = currentSessionToken;
+
     session=data;
     sessionStorage.setItem('hrSession',JSON.stringify(session));
     await enterApp();
@@ -897,19 +986,16 @@ async function handlePunch(){
   const btn=document.getElementById('punchBtn');
   btn.disabled=true;
   try {
-    if(!isPunchedIn){
-      await doPunchIn();
-    } else {
-      await doPunchOut();
-    }
+    await validateSession();
+    const action = isPunchedIn ? 'out' : 'in';
+    openSelfieModal(action);
   } catch(err){
     showToast(err.message,'error');
-  } finally {
     btn.disabled=false;
   }
 }
 
-async function doPunchIn(){
+async function doPunchIn(photoUrl){
   if(!currentPos) throw new Error('GPS not ready.');
   if(!session.store_id) throw new Error('No store assigned.');
   const dist=haversineDistance(currentPos.lat,currentPos.lng,parseFloat(currentStore.lat),parseFloat(currentStore.lng));
@@ -921,6 +1007,7 @@ async function doPunchIn(){
     punch_in_time:new Date().toISOString(),
     punch_in_lat:currentPos.lat,
     punch_in_lng:currentPos.lng,
+    punch_in_photo_url:photoUrl||null,
   }).select().single();
   if(error) throw new Error('Database error: '+error.message);
 
@@ -950,16 +1037,29 @@ async function doPunchIn(){
   loadTodayRecord();
 }
 
-async function doPunchOut(){
+async function doPunchOut(photoUrl){
   if(!currentAttendanceId) throw new Error('No active punch-in found.');
   const punchOutTime=new Date();
   const hours=((punchOutTime-punchInTime)/3600000).toFixed(2);
+
+  // ── Geofence at Punch Out (Layer 3) ──
+  let punchOutWithinZone = null;
+  if(currentPos && currentStore){
+    const dist = Math.round(haversineDistance(currentPos.lat, currentPos.lng, parseFloat(currentStore.lat), parseFloat(currentStore.lng)));
+    const radius = parseInt(currentStore.radius_meters) || 100;
+    punchOutWithinZone = dist <= radius;
+    if(!punchOutWithinZone){
+      showToast(`Warning: Punching out ${dist}m outside store zone!`, 'warning');
+    }
+  }
 
   const {error}=await db.from('attendance').update({
     punch_out_time:punchOutTime.toISOString(),
     punch_out_lat:currentPos?currentPos.lat:null,
     punch_out_lng:currentPos?currentPos.lng:null,
     total_hours:parseFloat(hours),
+    punch_out_within_zone:punchOutWithinZone,
+    punch_out_photo_url:photoUrl||null,
   }).eq('id',currentAttendanceId);
   if(error) throw new Error('Database error: '+error.message);
 
@@ -1070,12 +1170,13 @@ async function changePassword(e){
 //  LOGOUT
 // ═══════════════════════════════════════════════════════
 async function logout(){
-  if(isPunchedIn){if(!confirm('You are still punched in. Punch out and logout?'))return;await doPunchOut();}
+  if(isPunchedIn){if(!confirm('You are still punched in. Punch out and logout?'))return;await doPunchOut(null);}
+  stopSelfieStream();
   if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null;}
   clearInterval(sessionTimerInterval);
   clearInterval(locationLogInterval);
   stopRealtimeTracking();
-  session=null;
+  session=null;currentSessionToken=null;
   sessionStorage.removeItem('hrSession');
   isPunchedIn=false;currentPos=null;currentStore=null;currentAttendanceId=null;
   // Destroy maps
@@ -1123,6 +1224,8 @@ async function initAdminView(){
   setTimeout(()=>adminLiveMap.invalidateSize(),250);
   await refreshLiveTracking();
   startRealtimeTracking();
+  // Auto-cleanup old photos silently on admin login
+  cleanupOldPhotos(true);
 }
 
 // ─── REALTIME SUBSCRIPTION ──────────────────────────────
@@ -1280,11 +1383,15 @@ async function loadReport(){
   reportData=data||[];
 
   const tbody=document.getElementById('reportBody');
-  if(reportData.length===0){tbody.innerHTML='<tr><td colspan="6" style="color:var(--gray)">No records found.</td></tr>';document.getElementById('reportTotal').textContent='';return;}
+  if(reportData.length===0){tbody.innerHTML='<tr><td colspan="9" style="color:var(--gray)">No records found.</td></tr>';document.getElementById('reportTotal').textContent='';return;}
 
   let totalHours=0;
   tbody.innerHTML=reportData.map(r=>{
     const h=parseFloat(r.total_hours)||0;totalHours+=h;
+    const zoneIcon = r.punch_out_within_zone===true?'<i class="fas fa-check-circle" style="color:var(--success);"></i>'
+                    :r.punch_out_within_zone===false?'<i class="fas fa-exclamation-triangle" style="color:var(--danger);"></i>':'—';
+    const inPhoto = r.punch_in_photo_url?`<a href="${r.punch_in_photo_url}" target="_blank"><img src="${r.punch_in_photo_url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;"></a>`:'—';
+    const outPhoto = r.punch_out_photo_url?`<a href="${r.punch_out_photo_url}" target="_blank"><img src="${r.punch_out_photo_url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;"></a>`:'—';
     return `<tr>
       <td>${r.staff?.full_name||r.staff_id}</td>
       <td>${r.stores?.name||'—'}</td>
@@ -1292,6 +1399,9 @@ async function loadReport(){
       <td>${fmtTime(r.punch_in_time)}</td>
       <td>${r.punch_out_time?fmtTime(r.punch_out_time):'Active'}</td>
       <td>${h.toFixed(2)}h</td>
+      <td>${zoneIcon}</td>
+      <td>${inPhoto}</td>
+      <td>${outPhoto}</td>
     </tr>`;
   }).join('');
   document.getElementById('reportTotal').textContent=`Total: ${reportData.length} records | ${totalHours.toFixed(2)} hours`;
@@ -1299,7 +1409,7 @@ async function loadReport(){
 
 function exportCSV(){
   if(!reportData.length){showToast('No data to export.','warning');return;}
-  const rows=[['Staff Name','Store','Date','Punch In','Punch Out','Hours']];
+  const rows=[['Staff Name','Store','Date','Punch In','Punch Out','Hours','Punch Out Zone','In Photo URL','Out Photo URL']];
   reportData.forEach(r=>{
     rows.push([
       r.staff?.full_name||r.staff_id,
@@ -1308,6 +1418,9 @@ function exportCSV(){
       fmtTime(r.punch_in_time),
       r.punch_out_time?fmtTime(r.punch_out_time):'Active',
       parseFloat(r.total_hours||0).toFixed(2),
+      r.punch_out_within_zone===true?'Yes':r.punch_out_within_zone===false?'No':'',
+      r.punch_in_photo_url||'',
+      r.punch_out_photo_url||'',
     ]);
   });
   const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
@@ -1315,6 +1428,84 @@ function exportCSV(){
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
   a.download=`attendance_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
+}
+
+// ─── PHOTO CLEANUP (auto + manual) ──────────────────────
+const PHOTO_RETENTION_DAYS = 30;
+
+async function cleanupOldPhotos(silent){
+  try {
+    const cutoff = new Date(Date.now() - PHOTO_RETENTION_DAYS * 86400000).toISOString();
+    // Find attendance records with photos older than retention period
+    const {data:oldRecords} = await db.from('attendance')
+      .select('id, staff_id, punch_in_photo_url, punch_out_photo_url, punch_in_time')
+      .lt('punch_in_time', cutoff)
+      .or('punch_in_photo_url.neq.null,punch_out_photo_url.neq.null')
+      .not('punch_in_photo_url','is',null);
+
+    // Also get records where only out photo exists
+    const {data:oldRecords2} = await db.from('attendance')
+      .select('id, staff_id, punch_in_photo_url, punch_out_photo_url, punch_in_time')
+      .lt('punch_in_time', cutoff)
+      .is('punch_in_photo_url', null)
+      .not('punch_out_photo_url','is',null);
+
+    const allOld = [...(oldRecords||[]), ...(oldRecords2||[])];
+    if(allOld.length === 0){
+      if(!silent) showToast('No old photos to clean up.','success');
+      return 0;
+    }
+
+    // Collect storage paths to delete
+    const pathsToDelete = [];
+    const idsToUpdate = [];
+    allOld.forEach(r => {
+      if(r.punch_in_photo_url){
+        const path = extractStoragePath(r.punch_in_photo_url);
+        if(path) pathsToDelete.push(path);
+      }
+      if(r.punch_out_photo_url){
+        const path = extractStoragePath(r.punch_out_photo_url);
+        if(path) pathsToDelete.push(path);
+      }
+      idsToUpdate.push(r.id);
+    });
+
+    // Delete files from storage in batches
+    if(pathsToDelete.length > 0){
+      // Supabase allows deleting multiple files at once
+      await db.storage.from('attendance-photos').remove(pathsToDelete);
+    }
+
+    // Clear photo URLs from attendance records
+    for(const id of idsToUpdate){
+      await db.from('attendance').update({
+        punch_in_photo_url: null,
+        punch_out_photo_url: null,
+      }).eq('id', id);
+    }
+
+    if(!silent) showToast(`Cleaned up ${pathsToDelete.length} photos from ${idsToUpdate.length} records.`,'success');
+    return pathsToDelete.length;
+  } catch(e){
+    console.warn('Photo cleanup error:', e);
+    if(!silent) showToast('Cleanup failed: ' + e.message, 'error');
+    return 0;
+  }
+}
+
+function extractStoragePath(publicUrl){
+  // Extract path after /attendance-photos/
+  if(!publicUrl) return null;
+  const marker = '/attendance-photos/';
+  const idx = publicUrl.indexOf(marker);
+  if(idx === -1) return null;
+  return publicUrl.substring(idx + marker.length);
+}
+
+async function manualPhotoCleanup(){
+  if(!confirm(`Delete all selfie photos older than ${PHOTO_RETENTION_DAYS} days?\n\nThis frees up storage but photo links in old reports will show "—".`)) return;
+  await cleanupOldPhotos(false);
 }
 
 // ─── TAB 3: STAFF MANAGEMENT ───────────────────────────
@@ -1369,6 +1560,13 @@ function openEditStaff(staffId){
     document.getElementById('es_dept').value=data.department;
     document.getElementById('es_role').value=data.role;
     document.getElementById('es_store').value=data.store_id||'';
+    // Device binding status
+    const devEl=document.getElementById('es_deviceStatus');
+    if(data.device_id){
+      devEl.innerHTML='<i class="fas fa-link" style="color:var(--success);"></i> <strong>Bound</strong> — Device ID: <code style="font-size:11px;">'+data.device_id.slice(0,8)+'…</code>';
+    } else {
+      devEl.innerHTML='<i class="fas fa-unlink" style="color:var(--gray);"></i> <strong>Not bound</strong> — will bind on next login.';
+    }
     document.getElementById('editStaffModal').classList.remove('hidden');
   });
 }
@@ -1397,6 +1595,15 @@ async function adminResetPassword(){
   if(error){showToast('Error: '+error.message,'error');return;}
   document.getElementById('es_resetpwd').value='';
   showToast('Password reset successfully.','success');
+}
+
+async function adminResetDevice(){
+  const id=document.getElementById('es_id').value;
+  if(!confirm(`Reset device binding for ${id}? They will need to log in again from a new device.`)) return;
+  const {error}=await db.from('staff').update({device_id:null}).eq('staff_id',id);
+  if(error){showToast('Error: '+error.message,'error');return;}
+  document.getElementById('es_deviceStatus').innerHTML='<span style="color:var(--success);">Device reset. Staff can log in from any device.</span>';
+  showToast('Device binding reset.','success');
 }
 
 async function toggleStaffActive(staffId,currentActive){
@@ -1494,6 +1701,136 @@ async function toggleStoreActive(id,currentActive){
 }
 
 // ═══════════════════════════════════════════════════════
+//  SELFIE CAPTURE (Anti-Buddy-Punching Layer 1)
+// ═══════════════════════════════════════════════════════
+function openSelfieModal(action){
+  selfieAction = action;
+  selfieBlob = null;
+  const titleEl = document.getElementById('selfieTitle');
+  titleEl.textContent = action==='in' ? 'Take Selfie to Punch In' : 'Take Selfie to Punch Out';
+  // Reset UI
+  document.getElementById('selfieVideo').style.display='block';
+  document.getElementById('selfieCaptured').style.display='none';
+  document.getElementById('selfieCaptureBtn').classList.remove('hidden');
+  document.getElementById('selfieConfirmBtn').classList.add('hidden');
+  document.getElementById('selfieRetakeBtn').classList.add('hidden');
+  document.getElementById('selfieModal').classList.remove('hidden');
+  // Start camera
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}})
+    .then(stream=>{
+      selfieStream = stream;
+      document.getElementById('selfieVideo').srcObject = stream;
+    })
+    .catch(()=>{
+      // Camera not available — allow punch without photo
+      if(confirm('Camera not available. Punch without photo? (This will be flagged in reports.)')){
+        document.getElementById('selfieModal').classList.add('hidden');
+        executePunch(null);
+      } else {
+        cancelSelfie();
+      }
+    });
+}
+
+function captureSelfie(){
+  const video = document.getElementById('selfieVideo');
+  const canvas = document.getElementById('selfieCanvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  // Mirror the image (front camera)
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  canvas.toBlob(blob=>{
+    selfieBlob = blob;
+    const img = document.getElementById('selfieCaptured');
+    img.src = URL.createObjectURL(blob);
+    img.style.display = 'block';
+    video.style.display = 'none';
+    document.getElementById('selfieCaptureBtn').classList.add('hidden');
+    document.getElementById('selfieConfirmBtn').classList.remove('hidden');
+    document.getElementById('selfieRetakeBtn').classList.remove('hidden');
+  }, 'image/jpeg', 0.8);
+}
+
+function retakeSelfie(){
+  selfieBlob = null;
+  document.getElementById('selfieVideo').style.display = 'block';
+  document.getElementById('selfieCaptured').style.display = 'none';
+  document.getElementById('selfieCaptureBtn').classList.remove('hidden');
+  document.getElementById('selfieConfirmBtn').classList.add('hidden');
+  document.getElementById('selfieRetakeBtn').classList.add('hidden');
+}
+
+function cancelSelfie(){
+  stopSelfieStream();
+  document.getElementById('selfieModal').classList.add('hidden');
+  selfieBlob = null;
+  selfieAction = null;
+  document.getElementById('punchBtn').disabled = false;
+}
+
+async function confirmSelfie(){
+  const confirmBtn = document.getElementById('selfieConfirmBtn');
+  confirmBtn.disabled = true;
+  confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading…';
+  try {
+    let photoUrl = null;
+    if(selfieBlob){
+      photoUrl = await uploadSelfie(selfieBlob);
+    }
+    stopSelfieStream();
+    document.getElementById('selfieModal').classList.add('hidden');
+    await executePunch(photoUrl);
+  } catch(err){
+    showToast(err.message, 'error');
+    document.getElementById('punchBtn').disabled = false;
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.innerHTML = '<i class="fas fa-check"></i> Confirm & Punch';
+  }
+}
+
+async function executePunch(photoUrl){
+  try {
+    if(selfieAction === 'in'){
+      await doPunchIn(photoUrl);
+    } else {
+      await doPunchOut(photoUrl);
+    }
+  } catch(err){
+    showToast(err.message, 'error');
+  } finally {
+    document.getElementById('punchBtn').disabled = false;
+    selfieAction = null;
+    selfieBlob = null;
+  }
+}
+
+async function uploadSelfie(blob){
+  const ts = Date.now();
+  const path = `${session.staff_id}/${selfieAction}_${ts}.jpg`;
+  const {error} = await db.storage.from('attendance-photos').upload(path, blob, {
+    contentType: 'image/jpeg',
+    upsert: false,
+  });
+  if(error) throw new Error('Photo upload failed: ' + error.message);
+  const {data} = db.storage.from('attendance-photos').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function stopSelfieStream(){
+  if(selfieStream){
+    selfieStream.getTracks().forEach(t=>t.stop());
+    selfieStream = null;
+  }
+  const video = document.getElementById('selfieVideo');
+  if(video) video.srcObject = null;
+}
+
+// ═══════════════════════════════════════════════════════
 //  SESSION RESTORE ON PAGE LOAD
 // ═══════════════════════════════════════════════════════
 (async()=>{
@@ -1502,10 +1839,18 @@ async function toggleStoreActive(id,currentActive){
   const saved=sessionStorage.getItem('hrSession');
   if(saved){
     try{
-      session=JSON.parse(saved);
+      const savedSession=JSON.parse(saved);
       // Re-verify from DB
-      const {data,error}=await db.from('staff').select('*').eq('staff_id',session.staff_id).eq('is_active',true).single();
+      const {data,error}=await db.from('staff').select('*').eq('staff_id',savedSession.staff_id).eq('is_active',true).single();
       if(error||!data){sessionStorage.removeItem('hrSession');return;}
+      // Verify session token matches (concurrent session prevention)
+      const savedToken = savedSession._sessionToken;
+      if(!savedToken || data.last_session_token !== savedToken){
+        sessionStorage.removeItem('hrSession');
+        return; // Another device logged in — don't restore
+      }
+      currentSessionToken = savedToken;
+      data._sessionToken = savedToken;
       session=data;
       await enterApp();
     } catch(e){sessionStorage.removeItem('hrSession');}
