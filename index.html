@@ -839,15 +839,17 @@ document.getElementById('loginForm').addEventListener('submit',async(e)=>{
     if(error||!data) throw new Error('Staff ID not found or account deactivated.');
     if(data.password_hash!==hash) throw new Error('Incorrect password.');
 
-    // ── Device Binding (Layer 2) ──
-    let hrDeviceId = localStorage.getItem('hrDeviceId');
-    if(!hrDeviceId){ hrDeviceId = crypto.randomUUID(); localStorage.setItem('hrDeviceId', hrDeviceId); }
-    if(data.device_id && data.device_id !== hrDeviceId){
-      throw new Error('Account registered to another device. Contact admin to reset device binding.');
-    }
-    if(!data.device_id){
-      await db.from('staff').update({device_id: hrDeviceId}).eq('staff_id', data.staff_id);
-      data.device_id = hrDeviceId;
+    // ── Device Binding (Layer 2) — skip for admin accounts ──
+    if(data.role !== 'admin'){
+      let hrDeviceId = localStorage.getItem('hrDeviceId');
+      if(!hrDeviceId){ hrDeviceId = crypto.randomUUID(); localStorage.setItem('hrDeviceId', hrDeviceId); }
+      if(data.device_id && data.device_id !== hrDeviceId){
+        throw new Error('Account registered to another device. Contact admin to reset device binding.');
+      }
+      if(!data.device_id){
+        await db.from('staff').update({device_id: hrDeviceId}).eq('staff_id', data.staff_id);
+        data.device_id = hrDeviceId;
+      }
     }
 
     // ── Concurrent Session Prevention (Layer 4) ──
