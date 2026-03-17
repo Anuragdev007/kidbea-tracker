@@ -643,12 +643,6 @@ tr:hover td{background:#f8fafc;}
         </div>
       </div>
     </div>
-    <hr style="margin:18px 0;">
-    <div>
-      <div class="card-title" style="margin-bottom:12px;"><i class="fas fa-mobile-alt"></i> Device Binding</div>
-      <p id="es_deviceStatus" style="font-size:13px;color:var(--gray);margin-bottom:10px;">Loading…</p>
-      <button class="btn btn-warning" onclick="adminResetDevice()"><i class="fas fa-unlink"></i> Reset Device</button>
-    </div>
   </div>
 </div>
 
@@ -838,19 +832,6 @@ document.getElementById('loginForm').addEventListener('submit',async(e)=>{
     const {data,error}=await db.from('staff').select('*').eq('staff_id',staffId).eq('is_active',true).single();
     if(error||!data) throw new Error('Staff ID not found or account deactivated.');
     if(data.password_hash!==hash) throw new Error('Incorrect password.');
-
-    // ── Device Binding (Layer 2) — skip for admin accounts ──
-    if(data.role !== 'admin'){
-      let hrDeviceId = localStorage.getItem('hrDeviceId');
-      if(!hrDeviceId){ hrDeviceId = crypto.randomUUID(); localStorage.setItem('hrDeviceId', hrDeviceId); }
-      if(data.device_id && data.device_id !== hrDeviceId){
-        throw new Error('Account registered to another device. Contact admin to reset device binding.');
-      }
-      if(!data.device_id){
-        await db.from('staff').update({device_id: hrDeviceId}).eq('staff_id', data.staff_id);
-        data.device_id = hrDeviceId;
-      }
-    }
 
     // ── Concurrent Session Prevention (Layer 4) ──
     currentSessionToken = crypto.randomUUID();
@@ -1563,13 +1544,6 @@ function openEditStaff(staffId){
     document.getElementById('es_dept').value=data.department;
     document.getElementById('es_role').value=data.role;
     document.getElementById('es_store').value=data.store_id||'';
-    // Device binding status
-    const devEl=document.getElementById('es_deviceStatus');
-    if(data.device_id){
-      devEl.innerHTML='<i class="fas fa-link" style="color:var(--success);"></i> <strong>Bound</strong> — Device ID: <code style="font-size:11px;">'+data.device_id.slice(0,8)+'…</code>';
-    } else {
-      devEl.innerHTML='<i class="fas fa-unlink" style="color:var(--gray);"></i> <strong>Not bound</strong> — will bind on next login.';
-    }
     document.getElementById('editStaffModal').classList.remove('hidden');
   });
 }
@@ -1598,15 +1572,6 @@ async function adminResetPassword(){
   if(error){showToast('Error: '+error.message,'error');return;}
   document.getElementById('es_resetpwd').value='';
   showToast('Password reset successfully.','success');
-}
-
-async function adminResetDevice(){
-  const id=document.getElementById('es_id').value;
-  if(!confirm(`Reset device binding for ${id}? They will need to log in again from a new device.`)) return;
-  const {error}=await db.from('staff').update({device_id:null}).eq('staff_id',id);
-  if(error){showToast('Error: '+error.message,'error');return;}
-  document.getElementById('es_deviceStatus').innerHTML='<span style="color:var(--success);">Device reset. Staff can log in from any device.</span>';
-  showToast('Device binding reset.','success');
 }
 
 async function toggleStaffActive(staffId,currentActive){
