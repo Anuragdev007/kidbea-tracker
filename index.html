@@ -1536,6 +1536,7 @@ async function loadStaffTable(){
       <td style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="openEditStaff('${s.staff_id}')"><i class="fas fa-edit"></i></button>
         <button class="btn ${s.is_active?'btn-danger':'btn-success'}" style="padding:6px 10px;font-size:12px;" onclick="toggleStaffActive('${s.staff_id}',${s.is_active})">${s.is_active?'<i class="fas fa-ban"></i>':'<i class="fas fa-check"></i>'}</button>
+        <button class="btn" style="padding:6px 10px;font-size:12px;background:#dc2626;color:#fff;" onclick="deleteStaff('${s.staff_id}','${s.full_name.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
       </td>
     </tr>`).join('');
 }
@@ -1599,6 +1600,16 @@ async function toggleStaffActive(staffId,currentActive){
   const {error}=await db.from('staff').update({is_active:!currentActive}).eq('staff_id',staffId);
   if(error){showToast('Error: '+error.message,'error');return;}
   showToast(`Staff ${currentActive?'deactivated':'reactivated'}.`,'success');
+  loadStaffTable();
+}
+
+async function deleteStaff(staffId,fullName){
+  if(!confirm(`Permanently delete "${fullName}" (${staffId})?\n\nThis will also delete all their attendance records. This cannot be undone.`)) return;
+  // Delete attendance records first (foreign key)
+  await db.from('attendance').delete().eq('staff_id',staffId);
+  const {error}=await db.from('staff').delete().eq('staff_id',staffId);
+  if(error){showToast('Error: '+error.message,'error');return;}
+  showToast(`Staff ${staffId} permanently deleted.`,'success');
   loadStaffTable();
 }
 
