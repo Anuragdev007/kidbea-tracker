@@ -702,7 +702,6 @@ let currentAttendanceId = null;
 let punchInTime = null;
 let sessionTimerInterval = null;
 let locationLogInterval = null;
-let currentSessionToken = null;
 let gpsRetryCount = 0;
 const GPS_MAX_RETRIES = 3;
 
@@ -774,15 +773,10 @@ function showView(id){
 
 function closeModal(id){document.getElementById(id).classList.add('hidden');}
 
-// ─── Session Validation (Anti-Buddy-Punching Layer 4) ──
+// ─── Session Validation ──
 async function validateSession(){
-  if(!session || !currentSessionToken) return;
-  const {data} = await db.from('staff').select('last_session_token').eq('staff_id', session.staff_id).single();
-  if(data && data.last_session_token !== currentSessionToken){
-    showToast('Session ended — someone logged in from another device.', 'error');
-    forceLogout();
-    throw new Error('Session invalidated.');
-  }
+  // Session token check removed — allow seamless multi-device login
+  return;
 }
 
 function forceLogout(){
@@ -791,7 +785,7 @@ function forceLogout(){
   clearInterval(locationLogInterval);
   stopRealtimeTracking();
   stopSelfieStream();
-  session=null;currentSessionToken=null;
+  session=null;
   sessionStorage.removeItem('hrSession');
   isPunchedIn=false;currentPos=null;currentStore=null;currentAttendanceId=null;
   if(staffMap){staffMap.remove();staffMap=null;staffMarker=null;storeCircle=null;}
@@ -834,11 +828,6 @@ document.getElementById('loginForm').addEventListener('submit',async(e)=>{
     const {data,error}=await db.from('staff').select('*').eq('staff_id',staffId).eq('is_active',true).single();
     if(error||!data) throw new Error('Staff ID not found or account deactivated.');
     if(data.password_hash!==hash) throw new Error('Incorrect password.');
-
-    // ── Concurrent Session Prevention (Layer 4) ──
-    currentSessionToken = crypto.randomUUID();
-    await db.from('staff').update({last_session_token: currentSessionToken}).eq('staff_id', data.staff_id);
-    data._sessionToken = currentSessionToken;
 
     session=data;
     sessionStorage.setItem('hrSession',JSON.stringify(session));
@@ -1192,7 +1181,7 @@ async function logout(){
   clearInterval(sessionTimerInterval);
   clearInterval(locationLogInterval);
   stopRealtimeTracking();
-  session=null;currentSessionToken=null;
+  session=null;
   sessionStorage.removeItem('hrSession');
   isPunchedIn=false;currentPos=null;currentStore=null;currentAttendanceId=null;
   // Destroy maps
@@ -1853,15 +1842,6 @@ document.getElementById('selfieModal').addEventListener('click',function(e){
       // Re-verify from DB
       const {data,error}=await db.from('staff').select('*').eq('staff_id',savedSession.staff_id).eq('is_active',true).single();
       if(error||!data){sessionStorage.removeItem('hrSession');showToast('Session expired. Please log in again.','warning');return;}
-      // Verify session token matches (concurrent session prevention)
-      const savedToken = savedSession._sessionToken;
-      if(!savedToken || data.last_session_token !== savedToken){
-        sessionStorage.removeItem('hrSession');
-        showToast('Logged out — another device signed in.','warning');
-        return;
-      }
-      currentSessionToken = savedToken;
-      data._sessionToken = savedToken;
       session=data;
       await enterApp();
     } catch(e){sessionStorage.removeItem('hrSession');showToast('Could not restore session. Please log in again.','warning');}
