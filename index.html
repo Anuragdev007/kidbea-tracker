@@ -703,6 +703,8 @@ let punchInTime = null;
 let sessionTimerInterval = null;
 let locationLogInterval = null;
 let currentSessionToken = null;
+let gpsRetryCount = 0;
+const GPS_MAX_RETRIES = 3;
 
 // Selfie state
 let selfieStream = null;
@@ -863,7 +865,13 @@ async function enterApp(){
     document.getElementById('staffAvatar').textContent=getInitials(session.full_name);
     document.getElementById('staffCompanyHeader').textContent=CONFIG.COMPANY_NAME;
     showView('staffView');
-    initStaffView();
+    try {
+      await initStaffView();
+    } catch(e){
+      console.error('initStaffView failed:',e);
+      showToast('Some features may be limited. Check your connection.','warning');
+      startGPS();
+    }
   }
 }
 
@@ -905,17 +913,23 @@ async function initStaffView(){
 }
 
 // ─── GPS ────────────────────────────────────────────────
-function startGPS(){
+function startGPS(highAccuracy=true){
   if(!navigator.geolocation){
     setLocStatus('bad','GPS not supported by this browser.');
     return;
   }
+  if(watchId!==null){
+    navigator.geolocation.clearWatch(watchId);
+    watchId=null;
+  }
+  setLocStatus('wait',highAccuracy?'Acquiring GPS (high accuracy)…':'Acquiring GPS…');
   watchId=navigator.geolocation.watchPosition(onGPSUpdate,onGPSError,{
-    enableHighAccuracy:true,timeout:15000,maximumAge:10000
+    enableHighAccuracy:highAccuracy,timeout:30000,maximumAge:10000
   });
 }
 
 function onGPSUpdate(pos){
+  gpsRetryCount=0;
   const {latitude:lat,longitude:lng,accuracy}=pos.coords;
   currentPos={lat,lng,accuracy};
   // Update coords display
@@ -952,9 +966,27 @@ function onGPSUpdate(pos){
 }
 
 function onGPSError(err){
+  if(err.code===3 && gpsRetryCount<GPS_MAX_RETRIES){
+    gpsRetryCount++;
+    const useHigh=gpsRetryCount<=1;
+    setLocStatus('wait',`GPS timed out. Retrying… (${gpsRetryCount}/${GPS_MAX_RETRIES})`);
+    startGPS(useHigh);
+    return;
+  }
   const msgs={1:'Location permission denied. Please allow location access.',
-               2:'GPS position unavailable.',3:'GPS timed out.'};
-  setLocStatus('bad',msgs[err.code]||'GPS error.');
+               2:'GPS position unavailable.',3:'GPS timed out after multiple attempts.'};
+  const msg=msgs[err.code]||'GPS error.';
+  setLocStatus('bad',msg+' <button onclick="retryGPS()" style="margin-left:8px;padding:2px 10px;border-radius:5px;border:1px solid #f59e0b;background:#fef3c7;cursor:pointer;font-size:12px;"><i class="fas fa-redo"></i> Retry</button>');
+}
+
+function retryGPS(){
+  gpsRetryCount=0;
+  if(watchId!==null){
+    navigator.geolocation.clearWatch(watchId);
+    watchId=null;
+  }
+  setLocStatus('wait','Retrying GPS…');
+  startGPS(true);
 }
 
 function setLocStatus(type,text){
@@ -1798,6 +1830,16 @@ function stopSelfieStream(){
   if(video) video.srcObject = null;
 }
 
+// ─── Selfie modal dismiss handlers ──────────────────────
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&!document.getElementById('selfieModal').classList.contains('hidden')){
+    cancelSelfie();
+  }
+});
+document.getElementById('selfieModal').addEventListener('click',function(e){
+  if(e.target===this) cancelSelfie();
+});
+
 // ═══════════════════════════════════════════════════════
 //  SESSION RESTORE ON PAGE LOAD
 // ═══════════════════════════════════════════════════════
@@ -1810,18 +1852,19 @@ function stopSelfieStream(){
       const savedSession=JSON.parse(saved);
       // Re-verify from DB
       const {data,error}=await db.from('staff').select('*').eq('staff_id',savedSession.staff_id).eq('is_active',true).single();
-      if(error||!data){sessionStorage.removeItem('hrSession');return;}
+      if(error||!data){sessionStorage.removeItem('hrSession');showToast('Session expired. Please log in again.','warning');return;}
       // Verify session token matches (concurrent session prevention)
       const savedToken = savedSession._sessionToken;
       if(!savedToken || data.last_session_token !== savedToken){
         sessionStorage.removeItem('hrSession');
-        return; // Another device logged in — don't restore
+        showToast('Logged out — another device signed in.','warning');
+        return;
       }
       currentSessionToken = savedToken;
       data._sessionToken = savedToken;
       session=data;
       await enterApp();
-    } catch(e){sessionStorage.removeItem('hrSession');}
+    } catch(e){sessionStorage.removeItem('hrSession');showToast('Could not restore session. Please log in again.','warning');}
   }
 })();
 
