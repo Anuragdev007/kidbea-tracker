@@ -1,7 +1,7 @@
 // Kidbea Tracker — Service Worker
 // Caches the app shell for offline / fast reload
 
-const CACHE = 'kidbea-v2';
+const CACHE = 'kidbea-v3';
 const SHELL = [
   '/kidbea-tracker/',
   '/kidbea-tracker/index.html',
