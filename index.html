@@ -822,10 +822,10 @@ document.getElementById('loginForm').addEventListener('submit',async(e)=>{
   btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Logging in…';
   try {
     if(!db) throw new Error('Supabase not configured. Please set CONFIG.SUPABASE_URL and CONFIG.SUPABASE_ANON_KEY.');
-    const staffId=document.getElementById('loginStaffId').value.trim().toUpperCase();
+    const staffId=document.getElementById('loginStaffId').value.trim();
     const password=document.getElementById('loginPassword').value;
     const hash=await sha256(password);
-    const {data,error}=await db.from('staff').select('*').eq('staff_id',staffId).eq('is_active',true).single();
+    const {data,error}=await db.from('staff').select('*').ilike('staff_id',staffId).eq('is_active',true).single();
     if(error||!data) throw new Error('Staff ID not found or account deactivated.');
     if(data.password_hash!==hash) throw new Error('Incorrect password.');
 
