@@ -376,6 +376,77 @@ tr:hover td{background:#f8fafc;}
 </div>
 
 <!-- ═══════════════════════════════════════
+     REGIONAL MANAGER VIEW
+═══════════════════════════════════════ -->
+<div id="rmView" class="hidden">
+  <header class="app-header">
+    <div class="app-header-left">
+      <img class="app-logo" alt="Kidbea Tracker" src="" style="height:36px;">
+      <span style="font-size:12px;font-weight:700;color:#fff;background:#f59e0b;padding:3px 10px;border-radius:20px;letter-spacing:.5px;">REGIONAL MGR</span>
+      <h2 id="rmCompanyHeader" style="display:none;"></h2>
+    </div>
+    <div class="user-chip">
+      <div class="avatar" style="background:linear-gradient(135deg,#f59e0b,#d97706);" id="rmAvatar">?</div>
+      <div class="user-meta">
+        <h3 id="rmName">-</h3>
+        <p>Regional Manager</p>
+      </div>
+      <span class="badge badge-off" id="rmDutyBadge"><i class="fas fa-circle" style="font-size:7px"></i> OFF DUTY</span>
+      <button class="btn btn-gray" onclick="showChangePwdModal()"><i class="fas fa-key"></i></button>
+      <button class="btn btn-danger" onclick="logout()"><i class="fas fa-sign-out-alt"></i></button>
+    </div>
+  </header>
+
+  <div class="main-content">
+    <div class="grid-2">
+
+      <!-- DAY CONTROL CARD -->
+      <div class="card">
+        <div class="card-title"><i class="fas fa-route"></i> Travel Day</div>
+        <div class="clock-wrap">
+          <div class="clock-time" id="rmClockDisplay">00:00:00</div>
+          <div class="clock-date" id="rmDateDisplay">-</div>
+        </div>
+        <button class="btn btn-primary btn-full" id="rmDayBtn" style="padding:14px;font-size:15px;">
+          <i class="fas fa-play"></i> <span id="rmDayBtnText">Start Day</span>
+        </button>
+        <div class="loc-status loc-wait" id="rmLocStatus" style="margin-top:14px;">
+          <i class="fas fa-spinner fa-spin"></i>
+          <span id="rmLocStatusText">Press "Start Day" to begin tracking.</span>
+        </div>
+        <div class="session-timer hidden" id="rmSessionTimerBox">
+          <div class="timer-lbl">On-Duty Duration</div>
+          <div class="timer-num" id="rmTimerDisplay">00:00:00</div>
+        </div>
+        <div style="margin-top:18px;padding:14px;background:#fef3c7;border-radius:10px;border-left:4px solid var(--warning);">
+          <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:4px;"><i class="fas fa-map-marker-alt"></i> CURRENTLY IN</div>
+          <div id="rmCityName" style="font-size:17px;font-weight:700;color:var(--dark);">—</div>
+          <div id="rmPlaceFull" style="font-size:12px;color:var(--gray);margin-top:4px;">Waiting for GPS…</div>
+        </div>
+      </div>
+
+      <!-- MAP CARD -->
+      <div class="card">
+        <div class="card-title">
+          <i class="fas fa-map"></i> Live Location
+          <span style="margin-left:auto;font-size:12px;color:var(--gray);" id="rmGpsCoords">—</span>
+        </div>
+        <div class="map-box map-box-tall" id="rmMapBox"></div>
+      </div>
+
+      <!-- TODAY'S TRAIL -->
+      <div class="card" style="grid-column:1/-1;">
+        <div class="card-title"><i class="fas fa-shoe-prints"></i> Today's Travel Trail</div>
+        <div id="rmTrailList" style="display:flex;flex-direction:column;gap:8px;">
+          <p style="color:var(--gray);font-size:13px;">No movement yet today.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
      ADMIN VIEW
 ═══════════════════════════════════════ -->
 <div id="adminView" class="hidden">
@@ -399,6 +470,7 @@ tr:hover td{background:#f8fafc;}
   <div class="main-content">
     <div class="tabs">
       <button class="tab-btn active" onclick="switchAdminTab('live',this)"><i class="fas fa-satellite-dish"></i> Live Tracking</button>
+      <button class="tab-btn" onclick="switchAdminTab('rm',this)"><i class="fas fa-route"></i> Regional Mgrs</button>
       <button class="tab-btn" onclick="switchAdminTab('reports',this)"><i class="fas fa-chart-bar"></i> Reports</button>
       <button class="tab-btn" onclick="switchAdminTab('staff',this)"><i class="fas fa-users"></i> Staff</button>
       <button class="tab-btn" onclick="switchAdminTab('stores',this)"><i class="fas fa-store"></i> Stores</button>
@@ -423,6 +495,28 @@ tr:hover td{background:#f8fafc;}
         </div>
         <div>
           <div class="map-box-tall" id="adminMapBox"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: REGIONAL MANAGERS -->
+    <div id="tab-rm" class="hidden">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <span style="font-size:15px;font-weight:700;color:var(--dark);"><i class="fas fa-route" style="color:var(--warning);margin-right:6px;"></i>Regional Managers — Live Travel Tracking</span>
+        <span style="font-size:12px;color:var(--gray);margin-left:auto;" id="rmLastUpdatedText"></span>
+        <button class="btn btn-gray" style="padding:6px 12px;font-size:12px;" onclick="refreshRmTracking()">
+          <i class="fas fa-sync"></i> Refresh
+        </button>
+      </div>
+      <div class="track-layout">
+        <div>
+          <div class="card-title"><i class="fas fa-briefcase"></i> Managers</div>
+          <div class="staff-panel" id="rmListPanel">
+            <p style="color:var(--gray);font-size:13px;">Loading…</p>
+          </div>
+        </div>
+        <div>
+          <div class="map-box-tall" id="adminRmMapBox"></div>
         </div>
       </div>
     </div>
@@ -488,6 +582,7 @@ tr:hover td{background:#f8fafc;}
                 <label>Role</label>
                 <select id="ns_role">
                   <option value="staff">Staff</option>
+                  <option value="regional_manager">Regional Manager</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -617,6 +712,7 @@ tr:hover td{background:#f8fafc;}
           <label>Role</label>
           <select id="es_role">
             <option value="staff">Staff</option>
+            <option value="regional_manager">Regional Manager</option>
             <option value="admin">Admin</option>
           </select>
         </div>
@@ -719,6 +815,20 @@ let realtimeChannel = null;
 let refreshDebounceTimer = null;
 let reportData = [];
 
+// Regional Manager state
+let rmMap = null, rmMarker = null;
+let rmWatchId = null;
+let rmLogInterval = null;
+let rmClockInterval = null;
+let rmSessionTimerInterval = null;
+let rmSessionId = null;
+let rmSessionStart = null;
+let rmLastCity = null;
+let rmLastPlace = null;
+let rmGeocodeCooldown = 0;
+let adminRmMap = null, adminRmMarkers = {};
+let rmRefreshDebounceTimer = null;
+
 // ═══════════════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════════════
@@ -766,7 +876,7 @@ function showToast(msg,type='success'){
 }
 
 function showView(id){
-  ['loginView','staffView','adminView'].forEach(v=>{
+  ['loginView','staffView','adminView','rmView'].forEach(v=>{
     document.getElementById(v).classList.toggle('hidden',v!==id);
   });
 }
@@ -783,15 +893,21 @@ function forceLogout(){
   if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null;}
   clearInterval(sessionTimerInterval);
   clearInterval(locationLogInterval);
+  if(typeof stopRmTracking==='function') stopRmTracking();
+  if(typeof stopRmSessionTimer==='function') stopRmSessionTimer();
+  if(rmClockInterval){clearInterval(rmClockInterval);rmClockInterval=null;}
   stopRealtimeTracking();
   stopSelfieStream();
   session=null;
   sessionStorage.removeItem('hrSession');
   isPunchedIn=false;currentPos=null;currentStore=null;currentAttendanceId=null;
+  rmSessionId=null;rmSessionStart=null;rmLastCity=null;rmLastPlace=null;
   if(staffMap){staffMap.remove();staffMap=null;staffMarker=null;storeCircle=null;}
   if(adminLiveMap){adminLiveMap.remove();adminLiveMap=null;}
+  if(rmMap){rmMap.remove();rmMap=null;rmMarker=null;}
+  if(adminRmMap){adminRmMap.remove();adminRmMap=null;}
   if(storePickerMapObj){storePickerMapObj.remove();storePickerMapObj=null;storePickerMarker=null;storePickerCircle=null;}
-  adminMarkers={};adminStoreCircles={};reportFiltersInited=false;reportData=[];
+  adminMarkers={};adminStoreCircles={};adminRmMarkers={};reportFiltersInited=false;reportData=[];
   document.getElementById('loginForm').reset();
   document.getElementById('loginError').classList.add('hidden');
   showView('loginView');
@@ -848,6 +964,17 @@ async function enterApp(){
     document.getElementById('adminCompanyHeader').textContent=CONFIG.COMPANY_NAME+' — Admin';
     showView('adminView');
     initAdminView();
+  } else if(session.role==='regional_manager'){
+    document.getElementById('rmName').textContent=session.full_name;
+    document.getElementById('rmAvatar').textContent=getInitials(session.full_name);
+    document.getElementById('rmCompanyHeader').textContent=CONFIG.COMPANY_NAME+' — Regional Manager';
+    showView('rmView');
+    try {
+      await initRegionalManagerView();
+    } catch(e){
+      console.error('initRegionalManagerView failed:',e);
+      showToast('Some features may be limited. Check your connection.','warning');
+    }
   } else {
     document.getElementById('staffName').textContent=session.full_name;
     document.getElementById('staffDept').textContent=session.department;
@@ -1172,24 +1299,371 @@ async function changePassword(e){
 }
 
 // ═══════════════════════════════════════════════════════
+//  REGIONAL MANAGER VIEW
+// ═══════════════════════════════════════════════════════
+async function initRegionalManagerView(){
+  // Clock (live)
+  const updRmClock=()=>{
+    const now=new Date();
+    document.getElementById('rmClockDisplay').textContent=now.toLocaleTimeString('en-IN',{hour12:false});
+    document.getElementById('rmDateDisplay').textContent=now.toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'short',year:'numeric'});
+  };
+  updRmClock();
+  rmClockInterval=setInterval(updRmClock,1000);
+
+  // Init map — default to India center until GPS lands
+  rmMap=L.map('rmMapBox').setView([20.5937,78.9629],5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OpenStreetMap',maxZoom:19}).addTo(rmMap);
+  const pulseIcon=L.divIcon({className:'',html:'<div style="width:14px;height:14px;background:#f59e0b;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 6px rgba(245,158,11,.35);"></div>',iconSize:[14,14],iconAnchor:[7,7]});
+  rmMarker=L.marker([20.5937,78.9629],{icon:pulseIcon}).addTo(rmMap);
+  setTimeout(()=>rmMap.invalidateSize(),250);
+
+  // Wire Start/End Day button
+  document.getElementById('rmDayBtn').onclick=async ()=>{
+    if(rmSessionId) await endTravelDay(); else await startTravelDay();
+  };
+
+  // Resume an in-progress session if the manager refreshed mid-day
+  try {
+    const {data:open}=await db.from('travel_sessions')
+      .select('*').eq('staff_id',session.staff_id).is('end_time',null)
+      .order('start_time',{ascending:false}).limit(1).maybeSingle();
+    if(open){
+      rmSessionId=open.id;
+      rmSessionStart=new Date(open.start_time);
+      setRmDayBtn(true);
+      startRmTracking();
+      startRmSessionTimer();
+    } else {
+      setRmDayBtn(false);
+    }
+  } catch(e){
+    console.warn('RM session lookup failed:',e);
+    setRmDayBtn(false);
+  }
+
+  loadRmTrail();
+}
+
+function setRmDayBtn(onDuty){
+  const b=document.getElementById('rmDayBtn');
+  const t=document.getElementById('rmDayBtnText');
+  const badge=document.getElementById('rmDutyBadge');
+  if(onDuty){
+    b.className='btn btn-danger btn-full';
+    b.querySelector('i').className='fas fa-stop';
+    t.textContent='End Day';
+    badge.className='badge badge-on';
+    badge.innerHTML='<i class="fas fa-circle" style="font-size:7px"></i> ON DUTY';
+    document.getElementById('rmSessionTimerBox').classList.remove('hidden');
+  } else {
+    b.className='btn btn-primary btn-full';
+    b.querySelector('i').className='fas fa-play';
+    t.textContent='Start Day';
+    badge.className='badge badge-off';
+    badge.innerHTML='<i class="fas fa-circle" style="font-size:7px"></i> OFF DUTY';
+    document.getElementById('rmSessionTimerBox').classList.add('hidden');
+  }
+}
+
+function setRmLocStatus(type,text){
+  const box=document.getElementById('rmLocStatus');
+  const t=document.getElementById('rmLocStatusText');
+  if(!box||!t) return;
+  box.className='loc-status '+(type==='ok'?'loc-ok':type==='bad'?'loc-bad':'loc-wait');
+  t.textContent=text;
+  const i=box.querySelector('i');
+  if(i) i.className=type==='ok'?'fas fa-check-circle':type==='bad'?'fas fa-exclamation-triangle':'fas fa-spinner fa-spin';
+}
+
+async function startTravelDay(){
+  const btn=document.getElementById('rmDayBtn');
+  btn.disabled=true;
+  try {
+    const {data,error}=await db.from('travel_sessions')
+      .insert({staff_id:session.staff_id}).select().single();
+    if(error) throw error;
+    rmSessionId=data.id;
+    rmSessionStart=new Date(data.start_time);
+    setRmDayBtn(true);
+    startRmTracking();
+    startRmSessionTimer();
+    showToast('Day started — tracking your location','success');
+  } catch(e){
+    console.error('startTravelDay:',e);
+    showToast('Could not start day: '+(e.message||e),'error');
+  } finally {
+    btn.disabled=false;
+  }
+}
+
+async function endTravelDay(){
+  if(!confirm('End your travel day? Location tracking will stop.')) return;
+  const btn=document.getElementById('rmDayBtn');
+  btn.disabled=true;
+  try {
+    await db.from('travel_sessions').update({
+      end_time:new Date().toISOString(),
+      end_city:rmLastCity||null
+    }).eq('id',rmSessionId);
+    stopRmTracking();
+    stopRmSessionTimer();
+    rmSessionId=null;
+    rmSessionStart=null;
+    setRmDayBtn(false);
+    setRmLocStatus('wait','Day ended. Press "Start Day" to begin again.');
+    showToast('Day ended','success');
+    loadRmTrail();
+  } catch(e){
+    console.error('endTravelDay:',e);
+    showToast('Could not end day: '+(e.message||e),'error');
+  } finally {
+    btn.disabled=false;
+  }
+}
+
+function startRmTracking(){
+  if(!navigator.geolocation){
+    setRmLocStatus('bad','GPS not supported by this browser.');
+    return;
+  }
+  if(rmWatchId!==null) navigator.geolocation.clearWatch(rmWatchId);
+  setRmLocStatus('wait','Acquiring GPS…');
+  rmWatchId=navigator.geolocation.watchPosition(onRmGPSUpdate,onRmGPSError,{
+    enableHighAccuracy:true,timeout:30000,maximumAge:10000
+  });
+  // Log to DB every 2 minutes while on duty (lighter than staff's 30s)
+  if(rmLogInterval) clearInterval(rmLogInterval);
+  rmLogInterval=setInterval(logRmLocation,120000);
+}
+
+function stopRmTracking(){
+  if(rmWatchId!==null){navigator.geolocation.clearWatch(rmWatchId);rmWatchId=null;}
+  if(rmLogInterval){clearInterval(rmLogInterval);rmLogInterval=null;}
+}
+
+function onRmGPSUpdate(pos){
+  const {latitude:lat,longitude:lng,accuracy}=pos.coords;
+  currentPos={lat,lng,accuracy};
+  document.getElementById('rmGpsCoords').textContent=lat.toFixed(5)+', '+lng.toFixed(5)+(accuracy?' · ±'+Math.round(accuracy)+'m':'');
+  rmMarker.setLatLng([lat,lng]);
+  if(rmMap.getZoom()<14) rmMap.setView([lat,lng],15); else rmMap.panTo([lat,lng]);
+  setRmLocStatus('ok','Tracking live · accuracy ±'+Math.round(accuracy||0)+'m');
+  // Fire-and-forget reverse geocode — updates the "Currently in" banner
+  reverseGeocode(lat,lng).then(info=>{
+    if(!info) return;
+    rmLastCity=info.city||rmLastCity;
+    rmLastPlace=info.placeName||rmLastPlace;
+    const cityEl=document.getElementById('rmCityName');
+    const fullEl=document.getElementById('rmPlaceFull');
+    if(cityEl) cityEl.textContent=(info.placeName?info.placeName+', ':'')+(info.city||'Unknown');
+    if(fullEl) fullEl.textContent=info.full||'';
+  });
+}
+
+function onRmGPSError(err){
+  console.warn('RM GPS error:',err);
+  setRmLocStatus('bad','GPS unavailable. Please allow location and keep the app open.');
+}
+
+async function logRmLocation(){
+  if(!currentPos||!rmSessionId) return;
+  const info = await reverseGeocode(currentPos.lat,currentPos.lng);
+  try {
+    await db.from('location_logs').insert({
+      staff_id:session.staff_id,
+      store_id:null,
+      lat:currentPos.lat,
+      lng:currentPos.lng,
+      distance_meters:null,
+      is_within_zone:null,
+      city: info?.city || rmLastCity || null,
+      place_name: info?.placeName || rmLastPlace || null
+    });
+  } catch(e){ console.warn('logRmLocation failed:',e); }
+}
+
+function startRmSessionTimer(){
+  const el=document.getElementById('rmTimerDisplay');
+  const tick=()=>{
+    if(!rmSessionStart) return;
+    const secs=Math.floor((Date.now()-rmSessionStart.getTime())/1000);
+    const h=String(Math.floor(secs/3600)).padStart(2,'0');
+    const m=String(Math.floor((secs%3600)/60)).padStart(2,'0');
+    const s=String(secs%60).padStart(2,'0');
+    el.textContent=h+':'+m+':'+s;
+  };
+  tick();
+  if(rmSessionTimerInterval) clearInterval(rmSessionTimerInterval);
+  rmSessionTimerInterval=setInterval(tick,1000);
+}
+function stopRmSessionTimer(){
+  if(rmSessionTimerInterval){clearInterval(rmSessionTimerInterval);rmSessionTimerInterval=null;}
+  document.getElementById('rmTimerDisplay').textContent='00:00:00';
+}
+
+// Reverse geocoding via OpenStreetMap Nominatim (same tile provider we already use).
+// Self-throttled to 1 req / 1.2s per Nominatim's usage policy.
+async function reverseGeocode(lat,lng){
+  const now=Date.now();
+  if(now<rmGeocodeCooldown) return null;
+  rmGeocodeCooldown=now+1200;
+  try {
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`,
+      {headers:{'Accept':'application/json'}});
+    if(!r.ok) return null;
+    const j=await r.json();
+    const a=j.address||{};
+    const city = a.city || a.town || a.village || a.municipality || a.county || a.state_district || a.state || '';
+    const placeName = a.neighbourhood || a.suburb || a.road || a.hamlet || j.name || '';
+    return { city, placeName, full: j.display_name || '' };
+  } catch(e){
+    console.warn('reverseGeocode:',e);
+    return null;
+  }
+}
+
+async function loadRmTrail(){
+  const el=document.getElementById('rmTrailList');
+  if(!el) return;
+  const start=new Date(); start.setHours(0,0,0,0);
+  try {
+    const {data}=await db.from('location_logs')
+      .select('city,place_name,lat,lng,recorded_at')
+      .eq('staff_id',session.staff_id)
+      .gte('recorded_at',start.toISOString())
+      .not('city','is',null)
+      .order('recorded_at',{ascending:true});
+    const seen=new Set(); const rows=[];
+    (data||[]).forEach(r=>{
+      const k=(r.city||'')+'|'+(r.place_name||'');
+      if(seen.has(k)) return; seen.add(k);
+      const t=new Date(r.recorded_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+      rows.push(`<div class="staff-item" style="border-left:3px solid var(--warning);padding-left:12px;">
+        <h4><i class="fas fa-map-marker-alt" style="color:var(--warning);font-size:11px;"></i> ${r.place_name||'—'}</h4>
+        <p>${r.city||''} · first seen ${t}</p>
+      </div>`);
+    });
+    el.innerHTML = rows.length ? rows.join('') : '<p style="color:var(--gray);font-size:13px;">No movement logged yet today.</p>';
+  } catch(e){ console.warn('loadRmTrail:',e); }
+}
+
+// ═══════════════════════════════════════════════════════
+//  ADMIN: REGIONAL MANAGERS TAB
+// ═══════════════════════════════════════════════════════
+function initAdminRmTab(){
+  if(!adminRmMap){
+    adminRmMap=L.map('adminRmMapBox').setView([20.5937,78.9629],5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(adminRmMap);
+  }
+  setTimeout(()=>adminRmMap.invalidateSize(),200);
+  refreshRmTracking();
+}
+
+async function refreshRmTracking(){
+  try { await _doRefreshRmTracking(); } catch(e){ console.warn('RM tracking refresh failed:',e); }
+}
+
+async function _doRefreshRmTracking(){
+  if(!adminRmMap) return;
+  const panel=document.getElementById('rmListPanel');
+
+  // Open sessions = currently on duty
+  const {data:openSessions}=await db.from('travel_sessions').select('staff_id').is('end_time',null);
+  const onDutySet=new Set((openSessions||[]).map(s=>s.staff_id));
+
+  // Latest location_log per regional manager in last 30 minutes
+  const since=new Date(Date.now()-30*60000).toISOString();
+  const {data:logs}=await db.from('location_logs')
+    .select('*, staff!inner(full_name,department,role)')
+    .eq('staff.role','regional_manager')
+    .gte('recorded_at',since)
+    .order('recorded_at',{ascending:false});
+  const latestMap={};
+  (logs||[]).forEach(l=>{ if(!latestMap[l.staff_id]) latestMap[l.staff_id]=l; });
+
+  // All active regional managers
+  const {data:managers}=await db.from('staff').select('*').eq('is_active',true).eq('role','regional_manager').order('full_name');
+
+  // Clear old markers
+  Object.values(adminRmMarkers).forEach(m=>adminRmMap.removeLayer(m));
+  adminRmMarkers={};
+
+  if(!managers||managers.length===0){
+    panel.innerHTML='<p style="color:var(--gray);font-size:13px;">No active regional managers.</p>';
+    const lu=document.getElementById('rmLastUpdatedText');
+    if(lu) lu.textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return;
+  }
+
+  let html='';
+  const bounds=[];
+  managers.forEach(mg=>{
+    const onDuty=onDutySet.has(mg.staff_id);
+    const loc=latestMap[mg.staff_id];
+    const city=loc?.city||'—';
+    const place=loc?.place_name||'—';
+    const lastSeen=loc?new Date(loc.recorded_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'—';
+    html+=`<div class="staff-item ${onDuty?'on':''}" style="${onDuty?'border-color:var(--warning);':''}" onclick="focusRm('${mg.staff_id}')">
+      <span class="dot ${onDuty?'dot-on':'dot-off'}" ${onDuty?'style="background:var(--warning);"':''}></span><h4>${mg.full_name}</h4>
+      <p>${onDuty?'ON DUTY':'OFF DUTY'} · ${city} · ${place} · ${lastSeen}</p>
+    </div>`;
+    if(loc){
+      const lat=parseFloat(loc.lat), lng=parseFloat(loc.lng);
+      bounds.push([lat,lng]);
+      const color=onDuty?'#f59e0b':'#64748b';
+      const icon=L.divIcon({className:'',html:`<div style="background:${color};color:#fff;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);">${getInitials(mg.full_name)}</div>`,iconSize:[34,34],iconAnchor:[17,17]});
+      adminRmMarkers[mg.staff_id]=L.marker([lat,lng],{icon}).addTo(adminRmMap)
+        .bindPopup(`<strong>${mg.full_name}</strong><br>Status: ${onDuty?'ON DUTY':'OFF DUTY'}<br>In: ${place}, ${city}<br>Last seen: ${lastSeen}`);
+    }
+  });
+  panel.innerHTML=html;
+  if(bounds.length>0) adminRmMap.fitBounds(bounds,{padding:[40,40],maxZoom:13});
+  const lu=document.getElementById('rmLastUpdatedText');
+  if(lu) lu.textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function focusRm(staffId){
+  const m=adminRmMarkers[staffId];
+  if(m){ adminRmMap.setView(m.getLatLng(),14); m.openPopup(); }
+}
+
+function scheduleRmRefresh(){
+  clearTimeout(rmRefreshDebounceTimer);
+  rmRefreshDebounceTimer=setTimeout(()=>{
+    const rmTab=document.getElementById('tab-rm');
+    if(rmTab && !rmTab.classList.contains('hidden')) refreshRmTracking();
+  },1000);
+}
+
+// ═══════════════════════════════════════════════════════
 //  LOGOUT
 // ═══════════════════════════════════════════════════════
 async function logout(){
   if(isPunchedIn){if(!confirm('You are still punched in. Punch out and logout?'))return;await doPunchOut(null,true);}
+  if(rmSessionId){if(!confirm('You are still on duty. End day and logout?'))return;await endTravelDay();}
   stopSelfieStream();
   if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null;}
   clearInterval(sessionTimerInterval);
   clearInterval(locationLogInterval);
+  stopRmTracking();
+  stopRmSessionTimer();
+  if(rmClockInterval){clearInterval(rmClockInterval);rmClockInterval=null;}
   stopRealtimeTracking();
   session=null;
   sessionStorage.removeItem('hrSession');
   isPunchedIn=false;currentPos=null;currentStore=null;currentAttendanceId=null;
+  rmSessionId=null;rmSessionStart=null;rmLastCity=null;rmLastPlace=null;
   // Destroy maps
   if(staffMap){staffMap.remove();staffMap=null;staffMarker=null;storeCircle=null;}
   if(adminLiveMap){adminLiveMap.remove();adminLiveMap=null;}
+  if(rmMap){rmMap.remove();rmMap=null;rmMarker=null;}
+  if(adminRmMap){adminRmMap.remove();adminRmMap=null;}
   if(storePickerMapObj){storePickerMapObj.remove();storePickerMapObj=null;storePickerMarker=null;storePickerCircle=null;}
-  adminMarkers={};adminStoreCircles={};reportFiltersInited=false;reportData=[];
+  adminMarkers={};adminStoreCircles={};adminRmMarkers={};reportFiltersInited=false;reportData=[];
   const lu=document.getElementById('lastUpdatedText');if(lu)lu.textContent='';
+  const luR=document.getElementById('rmLastUpdatedText');if(luR)luR.textContent='';
   document.getElementById('loginForm').reset();
   document.getElementById('loginError').classList.add('hidden');
   showView('loginView');
@@ -1199,12 +1673,13 @@ async function logout(){
 //  ADMIN: TAB SWITCHING
 // ═══════════════════════════════════════════════════════
 function switchAdminTab(tab,btn){
-  ['live','reports','staff','stores'].forEach(t=>{
+  ['live','rm','reports','staff','stores'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('hidden',t!==tab);
   });
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(tab==='live'){setTimeout(()=>{if(adminLiveMap)adminLiveMap.invalidateSize();},150);refreshLiveTracking();}
+  if(tab==='rm'){initAdminRmTab();}
   if(tab==='reports') initReportFilters();
   if(tab==='staff') loadStaffTable();
   if(tab==='stores') {loadStoreTable();initStorePicker();}
@@ -1215,7 +1690,7 @@ function switchAdminTab(tab,btn){
 // ═══════════════════════════════════════════════════════
 async function initAdminView(){
   // Always start on the Live tab (tab state may be dirty from a previous session)
-  ['live','reports','staff','stores'].forEach(t=>
+  ['live','rm','reports','staff','stores'].forEach(t=>
     document.getElementById('tab-'+t).classList.toggle('hidden',t!=='live'));
   document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
 
@@ -1247,6 +1722,8 @@ function scheduleRefresh(){
   // Debounce: wait 1s after last event before refreshing (absorbs location log bursts)
   clearTimeout(refreshDebounceTimer);
   refreshDebounceTimer=setTimeout(()=>refreshLiveTracking(),1000);
+  // Also refresh the Regional Managers tab if it's currently visible
+  scheduleRmRefresh();
 }
 
 function startRealtimeTracking(){
@@ -1257,6 +1734,8 @@ function startRealtimeTracking(){
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'location_logs'},()=>scheduleRefresh())
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'attendance'},()=>scheduleRefresh())
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'attendance'},()=>scheduleRefresh())
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'travel_sessions'},()=>scheduleRmRefresh())
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'travel_sessions'},()=>scheduleRmRefresh())
     .subscribe((status,err)=>{
       if(status==='SUBSCRIBED'){
         setRtStatus('live');
@@ -1531,7 +2010,7 @@ async function loadStaffTable(){
       <td>${s.full_name}</td>
       <td>${s.department}</td>
       <td>${s.stores?.name||'—'}</td>
-      <td><span class="badge ${s.role==='admin'?'badge-on':'badge-off'}">${s.role}</span></td>
+      <td><span class="badge ${s.role==='admin'?'badge-on':'badge-off'}">${s.role==='regional_manager'?'Regional Mgr':s.role}</span></td>
       <td><span class="badge ${s.is_active?'badge-on':'badge-off'}">${s.is_active?'Active':'Inactive'}</span></td>
       <td style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="openEditStaff('${s.staff_id}')"><i class="fas fa-edit"></i></button>
@@ -1859,8 +2338,11 @@ document.getElementById('selfieModal').addEventListener('click',function(e){
   }
 })();
 
-// Warn on close if punched in
-window.onbeforeunload=()=>{if(isPunchedIn)return 'You are still punched in. Punch out before closing.';};
+// Warn on close if punched in or on-duty as a regional manager
+window.onbeforeunload=()=>{
+  if(isPunchedIn) return 'You are still punched in. Punch out before closing.';
+  if(rmSessionId) return 'You are still on duty. End your day before closing.';
+};
 
 // ─── Register Service Worker (PWA / Add to Home Screen) ─
 if('serviceWorker' in navigator){
