@@ -1,7 +1,7 @@
 // Kidbea Tracker — Service Worker
 // Network-first for app pages, cache-first for CDN assets
 
-const CACHE = 'kidbea-v6';
+const CACHE = 'kidbea-v7';
 const SHELL = [
   '/kidbea-tracker/',
   '/kidbea-tracker/index.html',

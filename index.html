@@ -826,6 +826,7 @@ let rmSessionStart = null;
 let rmLastCity = null;
 let rmLastPlace = null;
 let rmGeocodeCooldown = 0;
+let rmFirstLogPending = false;     // log the very first GPS fix after Start Day
 let adminRmMap = null, adminRmMarkers = {};
 let rmRefreshDebounceTimer = null;
 
@@ -1386,9 +1387,12 @@ async function startTravelDay(){
     if(error) throw error;
     rmSessionId=data.id;
     rmSessionStart=new Date(data.start_time);
+    rmFirstLogPending=true;   // log immediately on first GPS fix (don't wait 2 min)
     setRmDayBtn(true);
     startRmTracking();
     startRmSessionTimer();
+    // If GPS was already acquired before Start Day, log right now
+    if(currentPos) logRmLocation();
     showToast('Day started — tracking your location','success');
   } catch(e){
     console.error('startTravelDay:',e);
@@ -1445,6 +1449,7 @@ function stopRmTracking(){
 
 function onRmGPSUpdate(pos){
   const {latitude:lat,longitude:lng,accuracy}=pos.coords;
+  const hadPos=!!currentPos;
   currentPos={lat,lng,accuracy};
   document.getElementById('rmGpsCoords').textContent=lat.toFixed(5)+', '+lng.toFixed(5)+(accuracy?' · ±'+Math.round(accuracy)+'m':'');
   rmMarker.setLatLng([lat,lng]);
@@ -1459,7 +1464,16 @@ function onRmGPSUpdate(pos){
     const fullEl=document.getElementById('rmPlaceFull');
     if(cityEl) cityEl.textContent=(info.placeName?info.placeName+', ':'')+(info.city||'Unknown');
     if(fullEl) fullEl.textContent=info.full||'';
+    // If this is the first fix of a new travel day, log it so admin sees the marker right away
+    if(rmFirstLogPending && rmSessionId){
+      rmFirstLogPending=false;
+      logRmLocation();
+    }
   });
+  // Safety net: if geocode API is slow/blocked, still log the first fix after 3s
+  if(rmFirstLogPending && rmSessionId && !hadPos){
+    setTimeout(()=>{ if(rmFirstLogPending && rmSessionId){ rmFirstLogPending=false; logRmLocation(); } },3000);
+  }
 }
 
 function onRmGPSError(err){
@@ -1569,24 +1583,11 @@ async function _doRefreshRmTracking(){
   if(!adminRmMap) return;
   const panel=document.getElementById('rmListPanel');
 
-  // Open sessions = currently on duty
-  const {data:openSessions}=await db.from('travel_sessions').select('staff_id').is('end_time',null);
-  const onDutySet=new Set((openSessions||[]).map(s=>s.staff_id));
+  // 1. Active regional managers
+  const {data:managers}=await db.from('staff').select('*')
+    .eq('is_active',true).eq('role','regional_manager').order('full_name');
 
-  // Latest location_log per regional manager in last 30 minutes
-  const since=new Date(Date.now()-30*60000).toISOString();
-  const {data:logs}=await db.from('location_logs')
-    .select('*, staff!inner(full_name,department,role)')
-    .eq('staff.role','regional_manager')
-    .gte('recorded_at',since)
-    .order('recorded_at',{ascending:false});
-  const latestMap={};
-  (logs||[]).forEach(l=>{ if(!latestMap[l.staff_id]) latestMap[l.staff_id]=l; });
-
-  // All active regional managers
-  const {data:managers}=await db.from('staff').select('*').eq('is_active',true).eq('role','regional_manager').order('full_name');
-
-  // Clear old markers
+  // Clear old markers early
   Object.values(adminRmMarkers).forEach(m=>adminRmMap.removeLayer(m));
   adminRmMarkers={};
 
@@ -1596,6 +1597,22 @@ async function _doRefreshRmTracking(){
     if(lu) lu.textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     return;
   }
+  const managerIds = managers.map(m=>m.staff_id);
+
+  // 2. Who is currently on duty (has an open travel_session)
+  const {data:openSessions}=await db.from('travel_sessions')
+    .select('staff_id').is('end_time',null).in('staff_id',managerIds);
+  const onDutySet=new Set((openSessions||[]).map(s=>s.staff_id));
+
+  // 3. Latest location_log per manager — look back 24 h so we always catch the last known position
+  const since=new Date(Date.now()-24*60*60000).toISOString();
+  const {data:logs}=await db.from('location_logs')
+    .select('staff_id,lat,lng,city,place_name,recorded_at')
+    .in('staff_id',managerIds)
+    .gte('recorded_at',since)
+    .order('recorded_at',{ascending:false});
+  const latestMap={};
+  (logs||[]).forEach(l=>{ if(!latestMap[l.staff_id]) latestMap[l.staff_id]=l; });
 
   let html='';
   const bounds=[];
@@ -1605,9 +1622,13 @@ async function _doRefreshRmTracking(){
     const city=loc?.city||'—';
     const place=loc?.place_name||'—';
     const lastSeen=loc?new Date(loc.recorded_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'—';
+    const sub = onDuty
+      ? (loc ? `<span style="color:#92400e;font-weight:700;">ON DUTY</span> · ${place}, ${city} · ${lastSeen}`
+             : `<span style="color:#92400e;font-weight:700;">ON DUTY</span> · waiting for first GPS fix…`)
+      : (loc ? `OFF DUTY · last in ${place}, ${city} · ${lastSeen}` : 'OFF DUTY · no location data');
     html+=`<div class="staff-item ${onDuty?'on':''}" style="${onDuty?'border-color:var(--warning);':''}" onclick="focusRm('${mg.staff_id}')">
       <span class="dot ${onDuty?'dot-on':'dot-off'}" ${onDuty?'style="background:var(--warning);"':''}></span><h4>${mg.full_name}</h4>
-      <p>${onDuty?'ON DUTY':'OFF DUTY'} · ${city} · ${place} · ${lastSeen}</p>
+      <p>${sub}</p>
     </div>`;
     if(loc){
       const lat=parseFloat(loc.lat), lng=parseFloat(loc.lng);
