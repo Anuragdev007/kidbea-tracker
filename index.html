@@ -472,6 +472,7 @@ tr:hover td{background:#f8fafc;}
       <button class="tab-btn active" onclick="switchAdminTab('live',this)"><i class="fas fa-satellite-dish"></i> Live Tracking</button>
       <button class="tab-btn" onclick="switchAdminTab('rm',this)"><i class="fas fa-route"></i> Regional Mgrs</button>
       <button class="tab-btn" onclick="switchAdminTab('reports',this)"><i class="fas fa-chart-bar"></i> Reports</button>
+      <button class="tab-btn" onclick="switchAdminTab('rmreports',this)"><i class="fas fa-route"></i> RM Reports</button>
       <button class="tab-btn" onclick="switchAdminTab('staff',this)"><i class="fas fa-users"></i> Staff</button>
       <button class="tab-btn" onclick="switchAdminTab('stores',this)"><i class="fas fa-store"></i> Stores</button>
     </div>
@@ -554,6 +555,37 @@ tr:hover td{background:#f8fafc;}
           </table>
         </div>
         <div id="reportTotal" style="margin-top:12px;font-weight:700;color:var(--dark);"></div>
+      </div>
+    </div>
+
+    <!-- TAB: RM REPORTS -->
+    <div id="tab-rmreports" class="hidden">
+      <div class="card" style="margin-bottom:18px;">
+        <div class="filter-bar">
+          <div class="form-group">
+            <label>From Date</label>
+            <input type="date" id="rmFilterFrom">
+          </div>
+          <div class="form-group">
+            <label>To Date</label>
+            <input type="date" id="rmFilterTo">
+          </div>
+          <div class="form-group">
+            <label>Regional Manager</label>
+            <select id="rmFilterManager"><option value="">All Managers</option></select>
+          </div>
+          <button class="btn btn-primary" onclick="loadRmReport()"><i class="fas fa-search"></i> Search</button>
+          <button class="btn btn-success" onclick="exportRmCSV()"><i class="fas fa-file-csv"></i> Export CSV</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Manager</th><th>Date</th><th>Start Time</th><th>End Time</th><th>Hours</th><th>Start City</th><th>End City</th><th>Cities Visited</th><th>Locations Logged</th></tr></thead>
+            <tbody id="rmReportBody"><tr><td colspan="9" style="color:var(--gray)">Select filters and click Search.</td></tr></tbody>
+          </table>
+        </div>
+        <div id="rmReportTotal" style="margin-top:12px;font-weight:700;color:var(--dark);"></div>
       </div>
     </div>
 
@@ -814,6 +846,7 @@ let storePickerMapObj = null, storePickerMarker = null, storePickerCircle = null
 let realtimeChannel = null;
 let refreshDebounceTimer = null;
 let reportData = [];
+let rmReportData = [];
 
 // Regional Manager state
 let rmMap = null, rmMarker = null;
@@ -908,7 +941,7 @@ function forceLogout(){
   if(rmMap){rmMap.remove();rmMap=null;rmMarker=null;}
   if(adminRmMap){adminRmMap.remove();adminRmMap=null;}
   if(storePickerMapObj){storePickerMapObj.remove();storePickerMapObj=null;storePickerMarker=null;storePickerCircle=null;}
-  adminMarkers={};adminStoreCircles={};adminRmMarkers={};reportFiltersInited=false;reportData=[];
+  adminMarkers={};adminStoreCircles={};adminRmMarkers={};reportFiltersInited=false;reportData=[];rmReportFiltersInited=false;rmReportData=[];
   document.getElementById('loginForm').reset();
   document.getElementById('loginError').classList.add('hidden');
   showView('loginView');
@@ -1682,7 +1715,7 @@ async function logout(){
   if(rmMap){rmMap.remove();rmMap=null;rmMarker=null;}
   if(adminRmMap){adminRmMap.remove();adminRmMap=null;}
   if(storePickerMapObj){storePickerMapObj.remove();storePickerMapObj=null;storePickerMarker=null;storePickerCircle=null;}
-  adminMarkers={};adminStoreCircles={};adminRmMarkers={};reportFiltersInited=false;reportData=[];
+  adminMarkers={};adminStoreCircles={};adminRmMarkers={};reportFiltersInited=false;reportData=[];rmReportFiltersInited=false;rmReportData=[];
   const lu=document.getElementById('lastUpdatedText');if(lu)lu.textContent='';
   const luR=document.getElementById('rmLastUpdatedText');if(luR)luR.textContent='';
   document.getElementById('loginForm').reset();
@@ -1694,7 +1727,7 @@ async function logout(){
 //  ADMIN: TAB SWITCHING
 // ═══════════════════════════════════════════════════════
 function switchAdminTab(tab,btn){
-  ['live','rm','reports','staff','stores'].forEach(t=>{
+  ['live','rm','reports','rmreports','staff','stores'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('hidden',t!==tab);
   });
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
@@ -1702,6 +1735,7 @@ function switchAdminTab(tab,btn){
   if(tab==='live'){setTimeout(()=>{if(adminLiveMap)adminLiveMap.invalidateSize();},150);refreshLiveTracking();}
   if(tab==='rm'){initAdminRmTab();}
   if(tab==='reports') initReportFilters();
+  if(tab==='rmreports') initRmReportFilters();
   if(tab==='staff') loadStaffTable();
   if(tab==='stores') {loadStoreTable();initStorePicker();}
 }
@@ -1711,7 +1745,7 @@ function switchAdminTab(tab,btn){
 // ═══════════════════════════════════════════════════════
 async function initAdminView(){
   // Always start on the Live tab (tab state may be dirty from a previous session)
-  ['live','rm','reports','staff','stores'].forEach(t=>
+  ['live','rm','reports','rmreports','staff','stores'].forEach(t=>
     document.getElementById('tab-'+t).classList.toggle('hidden',t!=='live'));
   document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
 
@@ -1932,6 +1966,136 @@ function exportCSV(){
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
   a.download=`attendance_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+}
+
+// ─── TAB: RM REPORTS ───────────────────────────────────
+let rmReportFiltersInited=false;
+async function initRmReportFilters(){
+  if(rmReportFiltersInited) return;
+  const today=new Date().toISOString().split('T')[0];
+  const week=new Date(Date.now()-6*86400000).toISOString().split('T')[0];
+  document.getElementById('rmFilterFrom').value=week;
+  document.getElementById('rmFilterTo').value=today;
+  const {data:managers}=await db.from('staff')
+    .select('staff_id,full_name').eq('is_active',true).eq('role','regional_manager').order('full_name');
+  const fm=document.getElementById('rmFilterManager');
+  fm.innerHTML='<option value="">All Managers</option>'+(managers||[]).map(m=>`<option value="${m.staff_id}">${m.full_name}</option>`).join('');
+  rmReportFiltersInited=true;
+}
+
+async function loadRmReport(){
+  const from=document.getElementById('rmFilterFrom').value;
+  const to=document.getElementById('rmFilterTo').value;
+  const mgr=document.getElementById('rmFilterManager').value;
+  if(!from||!to){showToast('Select date range.','warning');return;}
+
+  const fromIso=from+'T00:00:00';
+  const toIso=to+'T23:59:59';
+
+  // 1. Travel sessions in range
+  let q=db.from('travel_sessions').select('*, staff(full_name)')
+    .gte('start_time',fromIso).lte('start_time',toIso)
+    .order('start_time',{ascending:false});
+  if(mgr) q=q.eq('staff_id',mgr);
+  const {data:sessions,error}=await q;
+  if(error){showToast('Query error: '+error.message,'error');return;}
+
+  const tbody=document.getElementById('rmReportBody');
+  if(!sessions||sessions.length===0){
+    rmReportData=[];
+    tbody.innerHTML='<tr><td colspan="9" style="color:var(--gray)">No travel sessions found.</td></tr>';
+    document.getElementById('rmReportTotal').textContent='';
+    return;
+  }
+
+  // 2. Pull location_logs for the same managers/range to derive cities & start city
+  const staffIds=[...new Set(sessions.map(s=>s.staff_id))];
+  const {data:logs}=await db.from('location_logs')
+    .select('staff_id,city,place_name,recorded_at')
+    .in('staff_id',staffIds)
+    .gte('recorded_at',fromIso)
+    .lte('recorded_at',toIso)
+    .order('recorded_at',{ascending:true});
+
+  // Index logs by staff_id for fast lookup per session
+  const logsByStaff={};
+  (logs||[]).forEach(l=>{
+    if(!l.city) return;
+    (logsByStaff[l.staff_id] = logsByStaff[l.staff_id] || []).push(l);
+  });
+
+  let totalHours=0, totalSessions=sessions.length;
+  rmReportData=sessions.map(s=>{
+    const start=new Date(s.start_time);
+    const end=s.end_time?new Date(s.end_time):null;
+    const hours=end?((end-start)/3600000):0;
+    totalHours+=hours;
+
+    // Cities visited during this session
+    const sessLogs=(logsByStaff[s.staff_id]||[]).filter(l=>{
+      const t=new Date(l.recorded_at).getTime();
+      return t>=start.getTime() && (!end || t<=end.getTime());
+    });
+    const cityList=[];
+    const seen=new Set();
+    sessLogs.forEach(l=>{
+      const c=l.city;
+      if(c && !seen.has(c)){seen.add(c);cityList.push(c);}
+    });
+    const startCity = sessLogs[0]?.city || '—';
+    const endCity = s.end_city || sessLogs[sessLogs.length-1]?.city || (end?'—':'(active)');
+
+    return {
+      manager: s.staff?.full_name || s.staff_id,
+      staff_id: s.staff_id,
+      date: fmtDate(s.start_time),
+      startTime: fmtTime(s.start_time),
+      endTime: end?fmtTime(s.end_time):'Active',
+      hours,
+      startCity,
+      endCity,
+      cities: cityList,
+      logCount: sessLogs.length,
+    };
+  });
+
+  tbody.innerHTML=rmReportData.map(r=>{
+    const citiesHtml = r.cities.length
+      ? r.cities.map(c=>`<span style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin:1px 2px;">${c}</span>`).join('')
+      : '—';
+    return `<tr>
+      <td>${r.manager}</td>
+      <td>${r.date}</td>
+      <td>${r.startTime}</td>
+      <td>${r.endTime}</td>
+      <td>${r.hours.toFixed(2)}h</td>
+      <td>${r.startCity}</td>
+      <td>${r.endCity}</td>
+      <td>${citiesHtml}</td>
+      <td>${r.logCount}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rmReportTotal').textContent=
+    `Total: ${totalSessions} session(s) | ${totalHours.toFixed(2)} hours on duty`;
+}
+
+function exportRmCSV(){
+  if(!rmReportData.length){showToast('No data to export.','warning');return;}
+  const rows=[['Manager','Staff ID','Date','Start Time','End Time','Hours','Start City','End City','Cities Visited','Locations Logged']];
+  rmReportData.forEach(r=>{
+    rows.push([
+      r.manager, r.staff_id, r.date, r.startTime, r.endTime,
+      r.hours.toFixed(2),
+      r.startCity, r.endCity,
+      r.cities.join(' | '),
+      r.logCount,
+    ]);
+  });
+  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download=`rm_travel_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
 }
 
