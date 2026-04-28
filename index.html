@@ -581,7 +581,7 @@ tr:hover td{background:#f8fafc;}
       <div class="card">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Manager</th><th>Date</th><th>Start Time</th><th>End Time</th><th>Hours</th><th>Start City</th><th>End City</th><th>Cities Visited</th><th>Locations Logged</th></tr></thead>
+            <thead><tr><th>Manager</th><th>Date</th><th>Start Time</th><th>End Time</th><th>Hours</th><th>Start Location</th><th>End Location</th><th>Locations Visited</th><th>Locations Logged</th></tr></thead>
             <tbody id="rmReportBody"><tr><td colspan="9" style="color:var(--gray)">Select filters and click Search.</td></tr></tbody>
           </table>
         </div>
@@ -2021,7 +2021,7 @@ async function loadRmReport(){
   // Index logs by staff_id for fast lookup per session
   const logsByStaff={};
   (logs||[]).forEach(l=>{
-    if(!l.city) return;
+    if(!l.city && !l.place_name) return;
     (logsByStaff[l.staff_id] = logsByStaff[l.staff_id] || []).push(l);
   });
 
@@ -2032,19 +2032,25 @@ async function loadRmReport(){
     const hours=end?((end-start)/3600000):0;
     totalHours+=hours;
 
-    // Cities visited during this session
+    // Locations visited during this session (granular: dedupe by place_name + city)
     const sessLogs=(logsByStaff[s.staff_id]||[]).filter(l=>{
       const t=new Date(l.recorded_at).getTime();
       return t>=start.getTime() && (!end || t<=end.getTime());
     });
-    const cityList=[];
+    const places=[];
     const seen=new Set();
+    const labelFor=l=>{
+      if(l.place_name && l.city && l.place_name!==l.city) return `${l.place_name}, ${l.city}`;
+      return l.place_name || l.city || '';
+    };
     sessLogs.forEach(l=>{
-      const c=l.city;
-      if(c && !seen.has(c)){seen.add(c);cityList.push(c);}
+      const label=labelFor(l);
+      if(label && !seen.has(label)){seen.add(label);places.push(label);}
     });
-    const startCity = sessLogs[0]?.city || '—';
-    const endCity = s.end_city || sessLogs[sessLogs.length-1]?.city || (end?'—':'(active)');
+    const startCity = (sessLogs[0] && labelFor(sessLogs[0])) || '—';
+    const endCity = s.end_city
+      || (sessLogs.length ? labelFor(sessLogs[sessLogs.length-1]) : '')
+      || (end?'—':'(active)');
 
     return {
       manager: s.staff?.full_name || s.staff_id,
@@ -2055,14 +2061,14 @@ async function loadRmReport(){
       hours,
       startCity,
       endCity,
-      cities: cityList,
+      places,
       logCount: sessLogs.length,
     };
   });
 
   tbody.innerHTML=rmReportData.map(r=>{
-    const citiesHtml = r.cities.length
-      ? r.cities.map(c=>`<span style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin:1px 2px;">${c}</span>`).join('')
+    const placesHtml = r.places.length
+      ? r.places.map(c=>`<span style="display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin:1px 2px;">${c}</span>`).join('')
       : '—';
     return `<tr>
       <td>${r.manager}</td>
@@ -2072,7 +2078,7 @@ async function loadRmReport(){
       <td>${r.hours.toFixed(2)}h</td>
       <td>${r.startCity}</td>
       <td>${r.endCity}</td>
-      <td>${citiesHtml}</td>
+      <td>${placesHtml}</td>
       <td>${r.logCount}</td>
     </tr>`;
   }).join('');
@@ -2082,13 +2088,13 @@ async function loadRmReport(){
 
 function exportRmCSV(){
   if(!rmReportData.length){showToast('No data to export.','warning');return;}
-  const rows=[['Manager','Staff ID','Date','Start Time','End Time','Hours','Start City','End City','Cities Visited','Locations Logged']];
+  const rows=[['Manager','Staff ID','Date','Start Time','End Time','Hours','Start Location','End Location','Locations Visited','Locations Logged']];
   rmReportData.forEach(r=>{
     rows.push([
       r.manager, r.staff_id, r.date, r.startTime, r.endTime,
       r.hours.toFixed(2),
       r.startCity, r.endCity,
-      r.cities.join(' | '),
+      r.places.join(' | '),
       r.logCount,
     ]);
   });
